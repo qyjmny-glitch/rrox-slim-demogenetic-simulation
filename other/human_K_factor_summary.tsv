@@ -1,0 +1,4 @@
+pressure_level	fmin	beta_h	file	human_K_factor_at_max_pressure
+low	0.80	0.223143551314	human_K_factor_low.tsv	0.800000
+medium	0.50	0.693147180560	human_K_factor_medium.tsv	0.500000
+high	0.20	1.609437912434	human_K_factor_high.tsv	0.200000

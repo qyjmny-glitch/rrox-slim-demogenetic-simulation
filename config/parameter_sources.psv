@@ -1,0 +1,98 @@
+parameter                         | value                    | source                                      | source_type      | note
+START_BP                          | 5200                     | 本研究古代样本年代校正                       | model_decision    | 古代个体实际测年约5129 BP；为与气候数据统一，模型使用5200 BP
+END_BP                            | 0                        | 本研究时间范围设定                           | model_decision    | 0 BP对应现代1950 CE
+FORWARD_YEARS                     | 5200                     | 本研究时间范围设定                           | derived           | 由START_BP - END_BP计算得到，即5200
+INCLUDE_BP0                       | 1                        | 本研究代码实现规则                           | model_decision    | forward包含5200 BP到0 BP，共5201个年度tick
+TICK_LENGTH_YEARS                 | 1                        | 本研究nonWF年度模型设定                      | model_decision    | 1个SLiM tick代表1年
+
+GENERATION_TIME                   | 10                       | Zhou et al. 2014                            | literature        | 川金丝猴世代时间设为10年
+MAX_AGE                           | 28                       | 赵素芬等 2016                               | literature        | 圈养川金丝猴生命表提供0–28岁年龄死亡率
+LIFE_TABLE_MIN_AGE                | 0                        | 赵素芬等 2016                               | literature        | 生命表起始年龄为0岁
+LIFE_TABLE_MAX_AGE                | 28                       | 赵素芬等 2016                               | literature        | 生命表最大年龄为28岁
+MORTALITY_AFTER_MAX_AGE           | 1.0                      | 本研究代码实现规则                           | model_decision    | 超过最大寿命后强制死亡
+
+FEMALE_MIN_REP_AGE                | 5                        | 任宝平 2002; 杨茜 2021                       | literature        | 成年雌性约5岁以后进入可繁殖阶段
+MALE_MIN_REP_AGE                  | 7                        | 任宝平 2002; 杨茜 2021                       | literature        | 杨茜将成年雄性定义为7岁以上；任宝平认为约8岁真正成年
+FEMALE_MAX_REP_AGE                | 22                       | 马吉中 2018                                 | derived           | 雌性繁殖年限占寿命60%；5 + 28 × 0.60 ≈ 22
+MALE_MAX_REP_AGE                  | 26                       | 马吉中 2018                                 | derived           | 雄性繁殖年限占寿命68%；7 + 28 × 0.68 ≈ 26
+DOM_MALE_MIN_AGE                  | 10                       | 杨茜 2021                                   | literature        | 雄性获得OMU和雌性配偶的高峰集中在10–15岁
+DOM_MALE_MAX_AGE                  | 15                       | 杨茜 2021                                   | literature        | 主雄优势年龄上限设为15岁
+MALE_SENESCENCE_AGE               | 16                       | 杨茜 2021                                   | literature        | 16岁以后雄性出现明显衰老迹象，繁殖优势下降
+MALE_DOMINANCE_BACKUP_MIN_AGE     | 7                        | 任宝平 2002; 杨茜 2021                       | model_decision    | 理想主雄不足时，允许成年雄性补位
+MALE_DOMINANCE_BACKUP_MAX_AGE     | 20                       | 本研究代码实现规则                           | model_decision    | 补位上限高于主雄理想年龄，但低于理论最大繁殖年龄，避免高龄雄性频繁成为主雄
+
+MALE_DISPERSAL_AGE                | 4                        | 杨茜 2021; 尚义昕 2023                       | literature        | 雄性后代约4岁左右从出生OMU迁入AMU
+DEPENDENCE_AGE                    | 2                        | 任宝平 2002                                 | literature        | 幼体依赖期约18–20个月，年尺度近似为2年
+WEANING_AGE                       | 2                        | 任宝平 2002                                 | literature        | 断乳年龄约18–20个月，年尺度近似为2年
+INTERBIRTH_INTERVAL               | 2                        | 任宝平 2002                                 | literature        | 正常生育间隔约24–25个月，年尺度近似为2年
+INTERBIRTH_IF_INFANT_DIES         | 1                        | 任宝平 2002                                 | literature        | 幼体死亡后生育间隔可缩短至约11.6个月，年尺度近似为1年
+LITTER_SIZE                       | 1                        | 任宝平 2002                                 | literature        | 每胎幼仔数设为1
+USE_P_CONCEPTION                  | 0                        | 本研究代码实现规则                           | model_decision    | 主模型用繁殖间隔和幼体依赖期控制繁殖，避免与P_CONCEPTION重复限制
+P_CONCEPTION                      | 1.0                      | 本研究敏感性参数                             | model_decision    | 仅当USE_P_CONCEPTION=1时启用
+SEX_RATIO_AT_BIRTH                | 0.5                      | 本研究模型设定                               | model_decision    | 出生性比设为接近1:1
+NEWBORNS_EXPERIENCE_AGE0_MORTALITY| 1                        | 本研究年度事件顺序                           | model_decision    | 新生幼体出生当年接受0岁死亡率筛选
+
+OMU_FEMALES                       | 5                        | 朱紫瑞等 2021                               | literature        | OMU内成年雄雌比约1:4.00、1:4.27和1:5.33，主模型设1主雄对应5雌性
+OMU_SPLIT_THRESHOLD               | 10                       | 本研究代码实现规则                           | model_decision    | OMU成年雌性过多时触发分裂
+OMU_SPLIT_FEMALES                 | 5                        | 本研究代码实现规则                           | model_decision    | OMU分裂时拆出约5个成年雌性形成新OMU
+OMU_DISSOLVE_FEMALES              | 0                        | 本研究代码实现规则                           | model_decision    | OMU成年雌性为0时解散
+OMU_STABLE_INHERITANCE            | 1                        | 本研究社会结构实现规则                       | model_decision    | OMU保持稳定，不每年随机重组
+FEMALE_DISPERSAL                  | 0                        | 本研究社会结构实现规则                       | model_decision    | 雌性不迁移OMU
+FEMALE_STAY_NATAL_OMU             | 1                        | 本研究社会结构实现规则                       | model_decision    | 雌性后代成年后留在出生OMU
+MALE_LEAVE_NATAL_OMU              | 1                        | 杨茜 2021; 尚义昕 2023                       | literature        | 雄性达到迁出年龄后离开出生OMU并进入AMU
+
+AMU_TARGET_SIZE                   | 10                       | Qi et al. 2014                              | derived           | GNG全雄分队3个AMU共28只雄性，平均每AMU约9.3只，主模型近似为10
+AMU_MALES_PER_OMU                 | 2                        | Qi et al. 2014                              | derived           | 20个OMU对应约44只AMU雄性，理论约2.2，模型简化为2
+AMU_GROUPING_MODE                 | by_target_size            | 本研究代码实现规则                           | model_decision    | 按AMU_TARGET_SIZE划分AMU
+SOLITARY_MALE_MODE                | none                     | 本研究社会结构简化                           | model_decision    | 不单独建模独雄
+SOLITARY_MALES_TO_AMU             | 1                        | 本研究社会结构简化                           | model_decision    | 无OMU雄性并入AMU候选池
+
+P_OWN_OMU                         | 0.62                     | 刘晓梅 2020                                 | literature        | 父本来自本OMU主雄的比例
+P_OTHER_OMU                       | 0.13                     | 刘晓梅 2020                                 | literature        | 父本来自其他OMU主雄的比例
+P_AMU                             | 0.25                     | 刘晓梅 2020                                 | literature        | 父本来自AMU雄性的比例
+DYNAMIC_PATERNITY_RENORMALIZE     | 1                        | 本研究代码实现规则                           | model_decision    | 父本候选类别为空时对剩余类别动态归一化
+NO_FATHER_NO_REPRODUCTION         | 1                        | 本研究代码实现规则                           | model_decision    | 若所有父本候选类别为空，则该雌性当年不繁殖
+FATHER_CHOICE_WITHIN_CATEGORY     | random                   | 本研究代码实现规则                           | model_decision    | 同一父本类别内部随机抽取具体父本
+
+MU_RATE                           | 1.36e-8                  | Hou et al. 2026; Zhou et al. 2014           | literature        | 每碱基每代突变率
+GENOME_LENGTH                     | 30000000                 | Robinson et al. 2022                        | model_design      | 压缩功能基因组约30 Mb
+GENE_COUNT                        | 20000                    | 本研究基因组结构设计                         | model_design      | 约2万个基因，后续根据实际注释调整
+GENE_LENGTH                       | 1500                     | 本研究基因组结构设计                         | model_design      | 每个基因用连续1500 bp表示，后续根据实际注释调整
+INTERGENIC_RECOMB_RATE            | 1e-3                     | Robinson et al. 2022                        | model_design      | 基因间近似独立重组，压缩模型不显式加入100 kb间隔
+INTRAGENIC_RECOMB_RATE            | 0                        | Robinson et al. 2022                        | model_design      | 基因内不允许重组
+NEUTRAL_FRACTION                  | 0.30                     | Robinson et al. 2022                        | literature        | 新突变中30%为中性突变
+DELETERIOUS_FRACTION              | 0.70                     | Robinson et al. 2022                        | literature        | 新突变中70%为有害突变
+DFE_MEAN                          | -0.0131                  | Kim et al. 2017; Robinson et al. 2022       | literature        | 人类大样本非同义突变DFE平均选择系数
+DFE_SHAPE                         | 0.186                    | Kim et al. 2017; Robinson et al. 2022       | literature        | Gamma DFE形状参数
+DFE_TIME_SCALE                    | generation               | Kim et al. 2017                             | literature        | 人类DFE选择系数为世代尺度
+S_SCALE_WEAK_MODERATE             | generation_time          | Robinson et al. 2022                        | model_decision    | 弱和中度有害突变按世代时间进行年度缩放
+S_SCALE_STRONG_VERYSTRONG         | none                     | Robinson et al. 2022                        | model_decision    | 强和极强有害突变保持原始效应
+H_CLASS_VERY_STRONG               | 0                        | Kim et al. 2017; Kyriazis et al. 2021       | literature        | s < -0.1时设h=0
+H_CLASS_STRONG                    | 0.01                     | Kim et al. 2017; Kyriazis et al. 2021       | literature        | -0.1 <= s < -0.01时设h=0.01
+H_CLASS_MODERATE                  | 0.1                      | Kim et al. 2017; Kyriazis et al. 2021       | literature        | -0.01 <= s < -0.001时设h=0.1
+H_CLASS_WEAK                      | 0.4                      | Kim et al. 2017; Kyriazis et al. 2021       | literature        | s >= -0.001时设h=0.4
+
+SCENARIO_M1                       | baseline                 | 本研究情景设计                               | model_decision    | K恒定为K5200，无气候、人类K压力和狩猎死亡
+SCENARIO_M2                       | climate                  | 本研究情景设计                               | model_decision    | 仅气候适宜栖息地变化影响K
+SCENARIO_M3                       | human                    | 本研究情景设计                               | model_decision    | 耕地面积影响K，聚落数量影响狩猎死亡
+SCENARIO_M4                       | combined                 | 本研究情景设计                               | model_decision    | 气候变化和人类活动共同影响
+CLIMATE_BETA_LOW                  | 0.5                      | 本研究敏感性分析                             | sensitivity       | K对适宜面积变化较迟钝
+CLIMATE_BETA_MEDIUM               | 1.0                      | 本研究敏感性分析                             | sensitivity       | 线性关系
+CLIMATE_BETA_HIGH                 | 1.5                      | 本研究敏感性分析                             | sensitivity       | K对适宜面积变化较敏感
+CLIMATE_K_FACTOR_MAX              | 1.0                      | 本研究代码实现规则                           | model_decision    | 不允许气候改善使K超过K5200
+
+HUMAN_ACTIVITY_PROXY              | cropland_and_settlements | 贺逸云 2025                                 | literature        | 洮河流域耕地面积和聚落数量作为人类活动代理
+HUMAN_K_BETA_LOW                  | 0.223                    | 本研究指数衰减参数化                         | derived           | 低土地利用压力情景
+HUMAN_K_BETA_MEDIUM               | 0.693                    | 本研究指数衰减参数化                         | derived           | 中土地利用压力情景；fmin=0.5时beta=-ln(0.5)
+HUMAN_K_BETA_HIGH                 | 1.609                    | 本研究指数衰减参数化                         | derived           | 高土地利用压力情景
+HUNTING_ANCHOR_SETTLEMENTS        | 372                      | 贺逸云 2025                                 | literature        | 马家窑文化时期聚落数量锚点
+HUNTING_Q_LOW                     | 0.010                    | Robinson & Bennett 2004                     | sensitivity       | 低狩猎压力锚点
+HUNTING_Q_MEDIUM                  | 0.025                    | Robinson & Bennett 2004                     | sensitivity       | 中狩猎压力锚点
+HUNTING_Q_HIGH                    | 0.050                    | Robinson & Bennett 2004                     | sensitivity       | 高狩猎压力锚点；灵长类可持续猎取率通常低于5%/年
+HUNTING_APPLIES_TO_ALL            | 1                        | 本研究代码实现规则                           | model_decision    | 狩猎死亡作用于全部年龄和性别个体
+
+SAMPLE_SIZE                       | 20                       | Luo et al. 2026                             | literature        | 云南白掌长臂猿遗传统计抽样20个体，N<20时使用全部个体
+NE_PI_FORMULA                     | pi/(4*mu)                | Kyriazis et al. 2019; Robinson et al. 2022  | method            | 用中性核苷酸多样性估计Wright-Fisher等效Ne
+FPED_DEPTH                        | parents_grandparents     | Robinson et al. 2022                        | method            | 记录父母ID和祖父母ID，输出近期谱系近交代理
+INBREEDING_LOAD_2B                | sum_abs_s_1_minus_h      | Robinson et al. 2022                        | method            | 对个体杂合有害突变求和abs(s)*(1-h)，估计个体2B
+ROH_LIKE_OUTPUT                   | simulated_coordinates    | 本研究代码实现规则                           | model_decision    | 压缩基因组ROH-like不能等同真实1 Mb ROH

@@ -1,0 +1,36 @@
+parameter                           | value | type   | required | description
+GENERATION_TIME                     | 10    | float  | yes      | 世代时间，单位年；用于DFE年度缩放和结果解释
+MAX_AGE                             | 28    | int    | yes      | 最大寿命；超过该年龄的个体强制死亡
+LIFE_TABLE_MIN_AGE                  | 0     | int    | yes      | 生命表最小年龄
+LIFE_TABLE_MAX_AGE                  | 28    | int    | yes      | 生命表最大年龄
+MORTALITY_AFTER_MAX_AGE             | 1.0   | float  | yes      | 超过生命表最大年龄后的年度死亡率
+
+FEMALE_MIN_REP_AGE                  | 5     | int    | yes      | 雌性最小繁殖年龄
+FEMALE_MAX_REP_AGE                  | 22    | int    | yes      | 雌性最大繁殖年龄；由5+28×0.60≈22得到
+MALE_MIN_REP_AGE                    | 7     | int    | yes      | 雄性最小繁殖年龄
+MALE_MAX_REP_AGE                    | 26    | int    | yes      | 雄性最大繁殖年龄；由7+28×0.68≈26得到
+
+DOM_MALE_MIN_AGE                    | 10    | int    | yes      | 主雄最小年龄；主雄优势年龄下限
+DOM_MALE_MAX_AGE                    | 15    | int    | yes      | 主雄最大年龄；超过后退任
+MALE_SENESCENCE_AGE                 | 16    | int    | yes      | 雄性开始生殖衰老的年龄
+MALE_DOMINANCE_BACKUP_MIN_AGE       | 7     | int    | yes      | 主雄不足时可补位雄性的最小年龄
+MALE_DOMINANCE_BACKUP_MAX_AGE       | 20    | int    | yes      | 主雄不足时可补位雄性的最大年龄
+
+MALE_DISPERSAL_AGE                  | 4     | int    | yes      | 雄性后代离开出生OMU并进入AMU候选池的年龄
+DEPENDENCE_AGE                      | 2     | int    | yes      | 幼体依赖期；未满该年龄的幼体视为依赖母体
+WEANING_AGE                         | 2     | int    | yes      | 断乳年龄，年尺度近似为2年
+INTERBIRTH_INTERVAL                 | 2     | int    | yes      | 正常生育间隔，年尺度近似为2年
+INTERBIRTH_IF_INFANT_DIES           | 1     | int    | yes      | 幼体死亡后可缩短的生育间隔，年尺度近似为1年
+
+LITTER_SIZE                         | 1     | int    | yes      | 每胎幼仔数量
+USE_P_CONCEPTION                    | 0     | bool   | yes      | 是否额外使用受孕概率P_CONCEPTION限制繁殖；主模型设为0，避免与生育间隔和幼体依赖期重复限制
+P_CONCEPTION                        | 1.0   | float  | yes      | 单次繁殖尝试的受孕成功概率；仅当USE_P_CONCEPTION=1时启用
+SEX_RATIO_AT_BIRTH                  | 0.5   | float  | yes      | 新生个体为雄性的概率，0.5表示出生性比接近1:1
+
+REQUIRE_NO_DEPENDENT_INFANT         | 1     | bool   | yes      | 可繁殖雌性是否必须没有未满幼体依赖期DEPENDENCE_AGE的存活幼体
+NEWBORNS_EXPERIENCE_AGE0_MORTALITY  | 1     | bool   | yes      | 新生幼体是否在出生当年接受0岁死亡率筛选
+GENETIC_FITNESS_AFFECTS_SURVIVAL    | 1     | bool   | yes      | 遗传适合度是否作用于年度存活概率
+GENETIC_FITNESS_AFFECTS_REPRODUCTION| 0     | bool   | yes      | 遗传适合度是否直接作用于繁殖成功率；主模型设为0
+
+INITIAL_AGE_DISTRIBUTION            | stable_life_table | string | yes | 初始年龄结构来源；按生命表稳定年龄分布抽样
+INITIAL_SEX_RATIO                   | 0.5   | float  | yes      | 初始个体为雄性的概率

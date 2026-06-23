@@ -1,0 +1,21 @@
+parameter                  | value | type   | required | description
+CLIMATE_BETA               | 1.0   | float  | yes      | 气候适宜面积转换为K因子的弹性参数；主模型设为1.0
+CLIMATE_BETA_LOW           | 0.5   | float  | no       | 气候敏感性低值；K对适宜面积变化较迟钝
+CLIMATE_BETA_HIGH          | 1.5   | float  | no       | 气候敏感性高值；K对适宜面积变化较敏感
+CLIMATE_K_FACTOR_MAX       | 1.0   | float  | yes      | climate_K_factor最大值；不允许气候改善使K超过K5200
+
+HUMAN_K_PRESSURE_LEVEL     | medium | string | yes      | 人类土地利用压力等级；low/medium/high
+HUMAN_K_FMIN_LOW           | 0.80  | float  | no       | 低土地利用压力下最大耕地面积时K的最低保留比例
+HUMAN_K_FMIN_MEDIUM        | 0.50  | float  | yes      | 中土地利用压力下最大耕地面积时K的最低保留比例
+HUMAN_K_FMIN_HIGH          | 0.20  | float  | no       | 高土地利用压力下最大耕地面积时K的最低保留比例
+HUMAN_K_BETA_LOW           | 0.223 | float  | no       | 低土地利用压力对应的指数衰减系数
+HUMAN_K_BETA_MEDIUM        | 0.693 | float  | yes      | 中土地利用压力对应的指数衰减系数
+HUMAN_K_BETA_HIGH          | 1.609 | float  | no       | 高土地利用压力对应的指数衰减系数
+
+HUNTING_PRESSURE_LEVEL     | high  | string | yes      | 狩猎压力等级；low/medium/high
+HUNTING_ANCHOR_SETTLEMENTS | 372   | int    | yes      | 马家窑文化时期聚落数量锚点
+HUNTING_Q_LOW              | 0.010 | float  | no       | 低狩猎压力下马家窑时期年度狩猎死亡率锚点
+HUNTING_Q_MEDIUM           | 0.025 | float  | no       | 中狩猎压力下马家窑时期年度狩猎死亡率锚点
+HUNTING_Q_HIGH             | 0.050 | float  | yes      | 高狩猎压力下马家窑时期年度狩猎死亡率锚点
+HUNTING_APPLIES_TO_ALL     | 1     | bool   | yes      | 狩猎死亡是否作用于全部年龄和性别个体
+HUNTING_INTERPOLATION      | step_or_linear | string | yes | 有资料阶段内部保持不变，资料缺口使用线性插值

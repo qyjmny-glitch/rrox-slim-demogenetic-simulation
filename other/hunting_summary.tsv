@@ -1,0 +1,4 @@
+pressure_level	q_anchor_Majiayao	anchor_settlements	q_Yangshao_9	q_Qijia_349	q_Ming_240	q_Qing_310	q_Republic_528	file
+low	0.010000	372	0.000242	0.009382	0.006452	0.008333	0.014194	hunting_low.tsv
+medium	0.025000	372	0.000605	0.023454	0.016129	0.020833	0.035484	hunting_medium.tsv
+high	0.050000	372	0.001210	0.046909	0.032258	0.041667	0.070968	hunting_high.tsv

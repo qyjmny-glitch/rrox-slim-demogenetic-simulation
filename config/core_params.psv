@@ -1,0 +1,60 @@
+parameter                       | value                                  | type   | required | description
+PROJECT_NAME                    | Rrox_ancient_forward                   | string | yes      | 项目名称
+RUN_MODE                        | forward                                | string | yes      | 运行模式：burnin 或 forward
+SCENARIO                        | M1                                     | string | yes      | 环境情景：M1/M2/M3/M4；M1基线，M2气候，M3人类活动，M4联合
+GENETIC_MODE                    | selected                               | string | yes      | 遗传情景：selected 或 neutral；neutral表示所有突变s=0的遗传对照
+REPLICATE_ID                    | 1                                      | int    | yes      | 重复编号；正式分析为100次重复中的编号
+RANDOM_SEED                     | 100001                                 | int    | yes      | 当前重复和情景使用的随机数种子
+OUT_PREFIX                      | outputs/test/run001                    | string | yes      | 当前运行的输出文件前缀
+
+START_BP                        | 5200                                   | int    | yes      | 正向模拟起点，单位BP；古代甘肃川金丝猴起始状态统一设为5200 BP
+END_BP                          | 0                                      | int    | yes      | 正向模拟终点，单位BP；0 BP对应现代1950 CE
+FORWARD_YEARS                   | 5200                                   | int    | yes      | 从5200 BP推进到0 BP的时间跨度，单位年
+INCLUDE_BP0                     | 1                                      | bool   | yes      | 是否包含0 BP终点状态；1表示记录5200、5199、...、1、0，共5201个年度tick
+FORWARD_TICKS                   | 5201                                   | int    | no       | forward阶段实际tick数；由FORWARD_YEARS + INCLUDE_BP0派生
+TICK_LENGTH_YEARS               | 1                                      | int    | yes      | 1个SLiM tick代表1个现实年份
+
+BURNIN_YEARS                    | 50000                                  | int    | yes      | burn-in候选长度或初始长度；当K5200=5000时对应10×K5200个tick；burn-in候选长度，单位为tick/年；当前按10×K5200设置为初始经验值，用于使年龄结构、社会结构和遗传变异达到相对稳定
+BURNIN_STOP_CHECK               | 1                                      | bool   | yes      | 是否检查burn-in稳定性；1表示检查π_neutral是否进入平台
+BURNIN_PI_WINDOW                | 20                                     | int    | yes      | burn-in停止判断使用的最近统计点数量
+BURNIN_PI_CHANGE_THRESHOLD      | 0.05                                   | float  | yes      | burn-in停止阈值；最近20个统计点中π_neutral变化率小于5%视为稳定
+BURNIN_LOG_INTERVAL             | 1000                                   | int    | yes      | burn-in阶段日志和遗传统计输出间隔，单位tick/年
+
+K5200                           | 5000                                   | float  | yes      | 5200 BP时环境承载量；当前为测试值，正式值由古代遗传指标和中性校准确定
+INITIAL_N                       | 5000                                   | int    | yes      | burn-in初始普查种群数量；测试阶段可设为接近K5200
+ALLOW_K_LT1                     | 1                                      | bool   | yes      | 是否允许动态K(t)<1；1表示不强制把极低承载量改为1
+K_ROUNDING_MODE                 | float_for_density                      | string | yes      | K(t)在密度调节中保留浮点数，不提前取整
+
+STAT_INTERVAL                   | 1                                      | int    | yes      | 年度人口统计输出间隔；总流程-1要求demographic每年输出
+GENETIC_STAT_INTERVAL           | 50                                     | int    | yes      | forward阶段常规遗传统计输出间隔，单位年
+GENETIC_STAT_N_LT100_INTERVAL   | 1                                      | int    | yes      | 当存活个体数N<100时，遗传统计改为每年输出
+SAMPLE_SIZE                     | 20                                     | int    | yes      | 遗传统计抽样个体数；若N<SAMPLE_SIZE且N>1，则使用全部存活个体；
+GENETIC_STAT_N_MIN              | 2                                      | int    | yes      | 当N<=1时无法计算的遗传统计输出为NA
+
+FUNCTIONAL_EXT_YEARS            | 5                                      | int    | yes      | 连续无可行繁殖配对达到该年数后记录功能性灭绝；主模型设为5年
+FUNCTIONAL_EXT_SENSITIVITY      | 3,5,10                                 | string | no       | 功能性灭绝阈值敏感性分析取值
+STOP_ON_FUNCTIONAL_EXT          | 0                                      | bool   | yes      | 是否在功能性灭绝后停止；总流程-1设为0，即只记录但继续运行
+QUASI_EXT_N                     | 10                                     | int    | yes      | 准灭绝阈值；N<10记录为准灭绝
+STOP_ON_QUASI_EXT               | 0                                      | bool   | yes      | 是否在准灭绝后停止；总流程-1设为0，即只记录但继续运行
+STOP_ON_DEMOGRAPHIC_EXT         | 1                                      | bool   | yes      | 是否在人口学灭绝N=0后停止；1表示N=0后终止当前模拟
+
+SAVE_TREES                      | 1                                      | bool   | yes      | 是否启用tree sequence记录
+TREESEQ_SAVE_KEYPOINTS          | 1                                      | bool   | yes      | 是否只在关键节点保存tree sequence；1表示不逐年保存完整trees
+TREESEQ_REGULAR_INTERVAL        | 1000                                   | int    | yes      | forward阶段定期保存tree sequence的间隔，单位年
+TREESEQ_N_THRESHOLDS            | 100,50,10                              | string | yes      | 首次低于这些N阈值时保存tree sequence
+SAVE_LAST_ALIVE_TREES           | 1                                      | bool   | yes      | 当N<=10且N>0时，每年覆盖保存lastAlive.trees，作为灭绝前最后存活状态
+BURNIN_TREES_IN                 | outputs/burnin/selected_rep001.trees   | string | no       | forward模式输入的burn-in树序列；selected和neutral应分别读取对应burn-in trees
+BURNIN_TREES_OUT                | NA                                     | string | no       | burnin模式输出树序列；当前RUN_MODE=forward时不使用；不重新 burn-in，而是读取已经保存好的 burn-in 初始状态
+
+LIFE_TABLE_FILE                 | input/life_table.tsv                   | string | yes      | 年龄死亡率输入文件；要求age从0连续到28，列为age和annual_mortality
+CLIMATE_FILE                    | input/climate_K_factor.tsv             | string | yes      | 逐年气候K因子文件；列为bp和climate_K_factor，覆盖5200到0 BP
+HUMAN_FILE                      | input/human_K_factor.tsv               | string | yes      | 逐年人类活动K因子文件；列为bp、cropland_area、cropland_pressure、human_K_factor
+HUNTING_FILE                    | input/hunting.tsv                      | string | yes      | 逐年狩猎死亡率文件；列为bp和annual_hunting_mortality
+INPUT_TIME_MODE                 | annual_bp_tsv                          | string | yes      | 所有气候、人类活动和狩猎压力均预先生成为逐年BP表，SLiM只按currentBP读取
+CLIMATE_UPDATE_MODE             | precomputed_annual_step                | string | yes      | 100年尺度气候数据已提前转换为逐年阶梯式climate_K_factor.tsv
+
+CHECK_INPUTS                    | 1                                      | bool   | yes      | 是否进行输入文件完整性和边界检查
+CHECK_BP_COVERAGE               | 1                                      | bool   | yes      | 是否检查逐年输入文件完整覆盖5200到0 BP
+CHECK_DUPLICATE_BP              | 1                                      | bool   | yes      | 是否检查输入文件中是否存在重复bp
+CHECK_VALUE_RANGES              | 1                                      | bool   | yes      | 是否检查annual_mortality、annual_hunting_mortality、climate/human factor等取值范围
+DEBUG_MODE                      | 0                                      | bool   | yes      | 是否运行调试模式；0表示正式或常规测试运行

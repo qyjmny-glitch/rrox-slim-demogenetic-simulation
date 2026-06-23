@@ -1,0 +1,50 @@
+parameter                         | value                     | type   | required | description
+SOCIAL_STRUCTURE_MODE             | explicit_OMU_AMU          | string | yes      | 显式建模OMU和AMU社会结构
+OMU_FEMALES                       | 5                         | int    | yes      | 每个OMU的目标成年雌性数量
+OMU_SPLIT_THRESHOLD               | 10                        | int    | yes      | 当OMU成年雌性数量超过该阈值时允许拆分OMU
+OMU_SPLIT_FEMALES                 | 5                         | int    | yes      | OMU拆分时迁入新OMU的成年雌性数量
+OMU_DISSOLVE_FEMALES              | 0                         | int    | yes      | 当OMU成年雌性数量小于等于该值时解散该OMU
+OMU_STABLE_INHERITANCE            | 1                         | bool   | yes      | OMU成员关系跨年份保持稳定继承
+FEMALE_DISPERSAL                  | 0                         | bool   | yes      | 雌性是否在OMU之间迁移
+FEMALE_STAY_NATAL_OMU             | 1                         | bool   | yes      | 雌性后代是否留在出生OMU
+MALE_LEAVE_NATAL_OMU              | 1                         | bool   | yes      | 雄性后代是否在迁出年龄离开出生OMU
+
+AMU_TARGET_SIZE                   | 10                        | int    | yes      | AMU目标群体大小，用于模型说明和QA派生指标
+AMU_MALES_PER_OMU                 | 2                         | float  | yes      | 初始阶段每个OMU近似对应的AMU雄性数量
+AMU_GROUPING_MODE                 | by_target_size            | string | yes      | AMU分组方式
+AMU_POOL_RULE                     | remaining_males           | string | yes      | 非主雄的剩余雄性进入AMU雄性池
+SOLITARY_MALE_MODE                | none                      | string | yes      | 是否单独建模独雄
+SOLITARY_MALES_TO_AMU             | 1                         | bool   | yes      | 将独雄或未分配雄性纳入AMU候选池
+
+DOM_MALE_ASSIGNMENT_MODE          | age_priority_random       | string | yes      | 主雄分配优先使用理想主雄年龄段，随后在候选雄性中随机选择
+DOM_MALE_REPLACEMENT_SOURCE       | AMU                       | string | yes      | 主雄替补来源为AMU雄性池
+DOM_MALE_RETIRE_AT_MAX_AGE        | 1                         | bool   | yes      | 主雄年龄超过DOM_MALE_MAX_AGE后退位
+DOM_MALE_REPLACEMENT_ON_DEATH     | 1                         | bool   | yes      | 主雄死亡后从AMU补充空缺OMU
+DOM_MALE_BACKUP_ALLOWED           | 1                         | bool   | yes      | 理想主雄年龄段没有候选者时允许使用backup年龄段
+DOM_MALE_TAKEOVER_MODE            | vacancy_only              | string | yes      | AMU雄性只接管处于主雄空缺状态的OMU
+DOM_MALE_RANDOM_WITHIN_CANDIDATES | 1                         | bool   | yes      | 在符合条件的主雄候选者中随机抽取
+DOM_MALE_RETIRED_TO_AMU           | 1                         | bool   | yes      | 退位主雄返回AMU雄性池
+
+P_OWN_OMU                         | 0.62                      | float  | yes      | 父本来自本OMU主雄的概率
+P_OTHER_OMU                       | 0.13                      | float  | yes      | 父本来自其他OMU主雄的概率
+P_AMU                             | 0.25                      | float  | yes      | 父本来自AMU雄性的概率
+PATERNITY_WEIGHTS_SUM             | 1.0                       | float  | yes      | 父本来源权重的预期总和
+DYNAMIC_PATERNITY_RENORMALIZE     | 1                         | bool   | yes      | 当某一父本类别为空时，对剩余父本来源权重重新归一化
+NO_FATHER_NO_REPRODUCTION         | 1                         | bool   | yes      | 若所有父本候选类别均为空，则该雌性当年不繁殖
+OWN_OMU_FATHER_RULE               | dominant_male_only        | string | yes      | 本OMU父本仅允许主雄
+OTHER_OMU_FATHER_RULE             | dominant_males_only       | string | yes      | 其他OMU父本仅允许主雄
+AMU_FATHER_RULE                   | reproductive_age_AMU_male | string | yes      | AMU父本为达到繁殖年龄的AMU雄性
+FATHER_CHOICE_WITHIN_CATEGORY     | random                    | string | yes      | 在选定父本类别内部随机选择具体父本
+
+INITIAL_OMU_ASSIGNMENT            | adult_females_by_OMU_SIZE | string | yes      | 初始OMU按成年雌性分组形成
+INITIAL_DOM_MALE_ASSIGNMENT       | age_priority_random       | string | yes      | 初始主雄采用年龄优先加随机抽取的分配方式
+INITIAL_AMU_ASSIGNMENT            | remaining_males           | string | yes      | 初始AMU雄性池包含剩余的达到迁出年龄雄性
+INITIAL_AMU_GROUPING              | by_AMU_TARGET_SIZE        | string | yes      | 初始AMU分组方式
+
+ALLOW_OMU_SPLIT                   | 1                         | bool   | yes      | 允许过大的OMU拆分
+SPLIT_REQUIRES_DOM_MALE           | 1                         | bool   | yes      | 新OMU必须有可用主雄才能成立
+ALLOW_OMU_DISSOLUTION             | 1                         | bool   | yes      | 允许没有成年雌性的OMU解散
+EMPTY_OMU_INDIVIDUALS_TO_AMU      | 1                         | bool   | yes      | 解散OMU中的雄性进入AMU
+
+USE_KIN_AVOIDANCE                 | 0                         | bool   | no       | 是否在父本选择中启用亲缘回避
+MAX_CHILD_FPED                    | NA                        | float  | no       | 启用亲缘回避时允许的子代谱系近交系数上限

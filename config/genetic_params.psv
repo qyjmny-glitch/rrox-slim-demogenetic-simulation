@@ -1,0 +1,39 @@
+parameter                       | value                                 | type   | required | description
+GENERATION_TIME                 | 10.0                                  | float  | yes      | 川金丝猴近似世代时间，单位为年；用于将中度和弱有害突变的每世代选择效应换算为年度效应
+AUTOSOME_COUNT                  | 21                                    | int    | yes      | 模拟川金丝猴21条常染色体上的压缩功能基因组区域
+GENE_COUNT                      | 20000                                 | int    | yes      | 模拟的功能基因数量；当前设置为2万个基因，后续可根据注释结果修改
+GENE_LENGTH                     | 1500                                  | int    | yes      | 每个模拟基因的长度，单位bp；当前设置为1500 bp，后续可根据实际平均CDS长度修改
+FUNCTIONAL_GENOME_SIZE          | 30000000                              | int    | no       | 压缩功能基因组总长度；由GENE_COUNT × GENE_LENGTH得到，即约30 Mb
+MU_RATE                         | 1.36e-8                               | float  | yes      | 每位点每次有性繁殖/减数分裂突变率；按每次繁殖事件使用，不按年度tick缩放
+BASE_RECOMB_RATE                | 1.0e-8                                | float  | no       | 用于推导基因间有效重组率的基础每bp每代重组率
+EFFECTIVE_INTERGENIC_LENGTH     | 100000                                | int    | no       | 用于推导相邻基因之间近似独立性的等效非编码距离，单位bp；压缩模型中不真实加入100 kb序列
+INTRAGENIC_RECOMB_RATE          | 0.0                                   | float  | yes      | 基因内部重组率；压缩功能区内不允许重组
+INTERGENIC_RECOMB_RATE          | 1.0e-3                                | float  | yes      | 相邻基因之间的有效重组率；由1.0e-8 × 100000推导得到
+CHROMOSOME_RECOMB_MODEL         | free_between_chromosomes              | string | yes      | 染色体之间自由组合；染色体内部按基因内0重组、基因间1.0e-3重组处理
+DFE_MODEL                       | gamma                                 | string | yes      | 有害突变适合度效应分布模型；gamma表示从gamma DFE中抽取选择系数s
+DFE_SOURCE                      | human_Kim2017                         | string | yes      | 暂用人类大样本DFE作为灵长类代理DFE；正式分析中需要进行遗传敏感性分析
+DFE_MEAN                        | -0.0131                               | float  | yes      | gamma DFE的平均选择系数；有害突变要求为负值
+DFE_SHAPE                       | 0.186                                 | float  | yes      | gamma DFE形状参数；控制弱、中度、强和极强有害突变的相对比例
+NEUTRAL_FRACTION                | 0.30                                  | float  | yes      | 新突变中中性突变的比例；中性突变选择系数s=0
+DELETERIOUS_FRACTION            | 0.70                                  | float  | yes      | 新突变中有害突变的比例；有害突变从gamma DFE中抽取s
+S_CLASSIFY_SCALE                | pre_scale_s                           | string | yes      | 先使用缩放前的原始s判断有害突变强度类别，再对中度和弱有害突变进行年度缩放
+S_SCALE_MODE                    | scale_moderate_weak_only              | string | yes      | 中度和弱有害突变的s除以GENERATION_TIME；强和极强有害突变保持原始世代尺度效应
+VSTRONG_S_RANGE                 | s < -0.1                              | string | no       | 极强有害突变的原始选择系数范围
+VSTRONG_H                       | 0.00                                  | float  | no       | 极强有害突变显性系数；完全隐性
+VSTRONG_S_SCALE                 | unscaled                              | string | no       | 极强有害突变不进行年度缩放
+STRONG_S_RANGE                  | -0.1 <= s < -0.01                     | string | no       | 强有害突变的原始选择系数范围
+STRONG_H                        | 0.01                                  | float  | no       | 强有害突变显性系数；接近完全隐性
+STRONG_S_SCALE                  | unscaled                              | string | no       | 强有害突变不进行年度缩放
+MODERATE_S_RANGE                | -0.01 <= s < -0.001                   | string | no       | 中度有害突变的原始选择系数范围
+MODERATE_H                      | 0.10                                  | float  | no       | 中度有害突变显性系数；部分隐性
+MODERATE_S_SCALE                | divide_by_GENERATION_TIME             | string | no       | 中度有害突变的s除以10年世代时间后作为年度效应
+WEAK_S_RANGE                    | s >= -0.001                           | string | no       | 弱有害突变的原始选择系数范围
+WEAK_H                          | 0.40                                  | float  | no       | 弱有害突变显性系数；接近加性但仍为部分隐性
+WEAK_S_SCALE                    | divide_by_GENERATION_TIME             | string | no       | 弱有害突变的s除以10年世代时间后作为年度效应
+NEUTRAL_S                       | 0.0                                   | float  | no       | 中性突变选择系数
+NEUTRAL_H                       | 0.50                                  | float  | no       | 中性突变显性系数；因s=0，不影响个体适合度
+USE_LOF_MUTATION_TYPE           | 0                                     | bool   | yes      | 是否单独设置LOF突变类型；最新版总流程-1中不增加LOF/missense/synonymous三类mutation type
+USE_MISSENSE_SYNONYMOUS_TYPES   | 0                                     | bool   | yes      | 是否单独设置missense和synonymous突变类型；最新版总流程-1中不使用该分类
+CONVERT_NEUTRAL_TO_SUBSTITUTION | 1                                     | bool   | yes      | 中性突变可转换为substitution，以减少计算量
+CONVERT_DELETERIOUS_TO_SUBSTITUTION | 0                                 | bool   | yes      | 有害突变不自动转换为substitution，以便统计固定有害突变和漂变负荷
+TREESEQ_RECORDING               | 1                                     | bool   | yes      | 是否开启initializeTreeSeq记录树序列；用于burn-in状态保存和后处理验证共祖尺度Ne
