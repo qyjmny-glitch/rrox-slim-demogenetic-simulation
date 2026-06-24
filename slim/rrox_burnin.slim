@@ -394,7 +394,7 @@ function (void) initializeRecombinationMapFromCompressedGenome(void)
 function (void) initializeLogFiles(void)
 {
     logFile = OUT_PREFIX + ".burnin_demography.tsv";
-    header = "cycle\tN\tN_female\tN_male\tN_juvenile\tN_age0\tN_age1\tadult_females\tadult_males\tbreeding_females\tOMU_count\tAMU_males\tAMU_count_proxy\tAMU_males_per_OMU\tdominant_males\tmean_age";
+    header = "cycle\tN\tN_female\tN_male\tN_juvenile\tN_age0\tN_age1\tbirths_total\tbirths_own_OMU\tbirths_other_OMU\tbirths_AMU\tadult_females\tadult_males\tbreeding_females\tOMU_count\tAMU_males\tAMU_count_proxy\tAMU_males_per_OMU\tdominant_males\tmean_age";
     writeFile(logFile, header, append=F);
     sim.setValue("burnin_log_file", logFile);
 
@@ -409,6 +409,33 @@ function (logical) shouldWriteBurninStats(void)
     return (sim.cycle % BURNIN_LOG_INTERVAL == 0 | sim.cycle == 1 | sim.cycle == BURNIN_YEARS);
 }
 
+function (void) resetBirthCounters(void)
+{
+    sim.setValue("births_total", 0);
+    sim.setValue("births_own_OMU", 0);
+    sim.setValue("births_other_OMU", 0);
+    sim.setValue("births_AMU", 0);
+    sim.setValue("last_father_category", "none");
+}
+
+function (void) incrementBirthCounter(string category)
+{
+    sim.setValue("births_total", sim.getValue("births_total") + 1);
+
+    if (category == "own_OMU")
+        sim.setValue("births_own_OMU", sim.getValue("births_own_OMU") + 1);
+    else
+    {
+        if (category == "other_OMU")
+            sim.setValue("births_other_OMU", sim.getValue("births_other_OMU") + 1);
+        else
+        {
+            if (category == "AMU")
+                sim.setValue("births_AMU", sim.getValue("births_AMU") + 1);
+        }
+    }
+}
+
 function (void) writeBurninLog(void)
 {
     inds = p1.individuals;
@@ -416,7 +443,12 @@ function (void) writeBurninLog(void)
 
     if (N == 0)
     {
-        line = sim.cycle + "\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\tNA\t0\tNA";
+        line = sim.cycle + "\t0\t0\t0\t0\t0\t0\t" +
+               sim.getValue("births_total") + "\t" +
+               sim.getValue("births_own_OMU") + "\t" +
+               sim.getValue("births_other_OMU") + "\t" +
+               sim.getValue("births_AMU") +
+               "\t0\t0\t0\t0\t0\t0\tNA\t0\tNA";
         writeFile(sim.getValue("burnin_log_file"), line, append=T);
         return;
     }
@@ -450,6 +482,10 @@ function (void) writeBurninLog(void)
            size(juveniles) + "\t" +
            size(age0) + "\t" +
            size(age1) + "\t" +
+           sim.getValue("births_total") + "\t" +
+           sim.getValue("births_own_OMU") + "\t" +
+           sim.getValue("births_other_OMU") + "\t" +
+           sim.getValue("births_AMU") + "\t" +
            size(adultFemales) + "\t" +
            size(adultMales) + "\t" +
            size(breedingFemales) + "\t" +
@@ -1003,6 +1039,7 @@ function (logical) isBreedingFemale(object female)
 function (object) chooseFather(object female)
 {
     inds = p1.individuals;
+    sim.setValue("last_father_category", "none");
 
     own = inds[(inds.sex == "M") &
                (inds.tag == female.tag) &
@@ -1032,12 +1069,7 @@ function (object) chooseFather(object female)
         weights[2] = 0.0;
 
     if (sum(weights) <= 0.0)
-    {
-        if (NO_FATHER_NO_REPRODUCTION == 1)
-            return NULL;
-        else
-            return NULL;
-    }
+        return NULL;
 
     if (DYNAMIC_PATERNITY_RENORMALIZE == 1)
         weights = weights / sum(weights);
@@ -1045,11 +1077,18 @@ function (object) chooseFather(object female)
     category = sample(0:2, 1, replace=F, weights=weights);
 
     if (category == 0)
+    {
+        sim.setValue("last_father_category", "own_OMU");
         return sample(own, 1);
+    }
 
     if (category == 1)
+    {
+        sim.setValue("last_father_category", "other_OMU");
         return sample(other, 1);
+    }
 
+    sim.setValue("last_father_category", "AMU");
     return sample(amu, 1);
 }
 
@@ -1171,6 +1210,7 @@ mutation(m2)
     sim.setValue("life_mortality", LIFE_MORTALITY);
     sim.setValue("next_omu_id", 1);
     sim.setValue("density_factor", 1.0);
+    resetBirthCounters();
 
     sim.addSubpop("p1", INITIAL_N);
 
@@ -1195,6 +1235,7 @@ first()
 {
     if (sim.cycle > 1)
     {
+        resetBirthCounters();
         updateSocialStructure();
         if (shouldWriteBurninStats())
             writeBurninQALog("pre_breeding");
@@ -1229,6 +1270,7 @@ reproduction()
         child.age = 0;
         child.tag = individual.tag;
         child.tagF = motherTagF(individual);
+        incrementBirthCounter(sim.getValue("last_father_category"));
 
         // 新生个体在同一tick内也必须经历age-0死亡率。
         mortality = sim.getValue("life_mortality");

@@ -3,14 +3,21 @@
 """
 summarize_outputs.py
 
-汇总SLiM forward输出。
+Summarize SLiM forward outputs for the Rhinopithecus roxellana model.
 
-输入：
+This version is compatible with the updated forward_demography.tsv format:
+  - demography files may contain a `stage` column;
+  - when `stage` exists, only `stage == post_mortality` rows are used for
+    extinction probability, final N, mean N, and time-bin summaries;
+  - paternity QA columns are summarized when present:
+        births_total, births_own_OMU, births_other_OMU, births_AMU.
+
+Inputs:
   outputs/forward/*.forward_demography.tsv
   outputs/forward/*.forward_genetic.tsv
   outputs/forward/*.forward_events.tsv
 
-输出：
+Outputs:
   summary/replicate_extinction_summary.tsv
   summary/extinction_probability_by_scenario.tsv
   summary/extinction_time_distribution.tsv
@@ -22,9 +29,17 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import pandas as pd
+
+
+PATERNITY_COLS = [
+    "births_total",
+    "births_own_OMU",
+    "births_other_OMU",
+    "births_AMU",
+]
 
 
 def infer_replicate_from_name(path: Path) -> Optional[int]:
@@ -40,13 +55,56 @@ def read_tsv_if_exists(path: Path) -> Optional[pd.DataFrame]:
     return pd.read_csv(path, sep="\t")
 
 
+def select_demography_stage(df: pd.DataFrame, path: Path) -> pd.DataFrame:
+    """
+    Use post_mortality rows for final demographic summaries.
+
+    The updated forward script can output both pre_breeding and post_mortality rows
+    for the same cycle/bp. Extinction summaries must use the annual final state,
+    i.e. post_mortality. Older files without stage are kept for backward compatibility.
+    """
+    if "stage" not in df.columns:
+        out = df.copy()
+        out["stage_used_for_summary"] = "no_stage_column"
+        return out
+
+    post = df[df["stage"].astype(str) == "post_mortality"].copy()
+    if post.empty:
+        raise ValueError(
+            f"{path}: has a stage column, but no rows with stage == 'post_mortality'."
+        )
+
+    post["stage_used_for_summary"] = "post_mortality"
+    return post
+
+
+def safe_int(value):
+    if pd.isna(value):
+        return None
+    return int(value)
+
+
+def safe_sum(df: pd.DataFrame, col: str):
+    if col not in df.columns:
+        return None
+    return float(pd.to_numeric(df[col], errors="coerce").fillna(0).sum())
+
+
+def safe_fraction(num, den):
+    if num is None or den is None or den == 0:
+        return None
+    return num / den
+
+
 def summarize_demography_file(path: Path) -> Dict[str, object]:
-    df = pd.read_csv(path, sep="\t")
+    raw = pd.read_csv(path, sep="\t")
+    if raw.empty:
+        raise ValueError(f"demography file is empty: {path}")
 
-    if df.empty:
-        raise ValueError(f"demography文件为空: {path}")
-
+    raw = raw.sort_values(["cycle", "bp"], ascending=[True, False]).reset_index(drop=True)
+    df = select_demography_stage(raw, path)
     df = df.sort_values(["cycle", "bp"], ascending=[True, False]).reset_index(drop=True)
+
     first = df.iloc[0]
     last = df.iloc[-1]
 
@@ -56,27 +114,35 @@ def summarize_demography_file(path: Path) -> Dict[str, object]:
 
     demographic_rows = df[df["N"] == 0]
     demographic_extinct = len(demographic_rows) > 0
-    demographic_extinction_bp = int(demographic_rows.iloc[0]["bp"]) if demographic_extinct else None
+    demographic_extinction_bp = safe_int(demographic_rows.iloc[0]["bp"]) if demographic_extinct else None
 
     functional_extinct = False
     functional_extinction_bp = None
     if "functional_extinct" in df.columns:
-        rows = df[df["functional_extinct"].astype(int) == 1]
+        rows = df[pd.to_numeric(df["functional_extinct"], errors="coerce").fillna(0).astype(int) == 1]
         functional_extinct = len(rows) > 0
-        functional_extinction_bp = int(rows.iloc[0]["bp"]) if functional_extinct else None
+        functional_extinction_bp = safe_int(rows.iloc[0]["bp"]) if functional_extinct else None
 
     quasi_extinct = False
     quasi_extinction_bp = None
     if "quasi_extinct" in df.columns:
-        rows = df[df["quasi_extinct"].astype(int) == 1]
+        rows = df[pd.to_numeric(df["quasi_extinct"], errors="coerce").fillna(0).astype(int) == 1]
         quasi_extinct = len(rows) > 0
-        quasi_extinction_bp = int(rows.iloc[0]["bp"]) if quasi_extinct else None
+        quasi_extinction_bp = safe_int(rows.iloc[0]["bp"]) if quasi_extinct else None
+
+    births_total = safe_sum(df, "births_total")
+    births_own = safe_sum(df, "births_own_OMU")
+    births_other = safe_sum(df, "births_other_OMU")
+    births_amu = safe_sum(df, "births_AMU")
 
     return {
         "file": str(path),
         "replicate": replicate,
         "scenario": scenario,
         "genetic_mode": genetic_mode,
+        "stage_used_for_summary": str(first.get("stage_used_for_summary", "NA")),
+        "n_raw_rows": len(raw),
+        "n_summary_rows": len(df),
         "demographic_extinct": int(demographic_extinct),
         "demographic_extinction_bp": demographic_extinction_bp,
         "functional_extinct": int(functional_extinct),
@@ -89,13 +155,20 @@ def summarize_demography_file(path: Path) -> Dict[str, object]:
         "min_N": int(df["N"].min()),
         "max_N": int(df["N"].max()),
         "mean_N": float(df["N"].mean()),
+        "births_total_sum": births_total,
+        "births_own_OMU_sum": births_own,
+        "births_other_OMU_sum": births_other,
+        "births_AMU_sum": births_amu,
+        "births_own_OMU_fraction": safe_fraction(births_own, births_total),
+        "births_other_OMU_fraction": safe_fraction(births_other, births_total),
+        "births_AMU_fraction": safe_fraction(births_amu, births_total),
     }
 
 
 def summarize_genetic_file(path: Path) -> Dict[str, object]:
     df = pd.read_csv(path, sep="\t")
     if df.empty:
-        raise ValueError(f"genetic文件为空: {path}")
+        raise ValueError(f"genetic file is empty: {path}")
 
     df = df.sort_values(["cycle", "bp"], ascending=[True, False]).reset_index(drop=True)
     last_nonzero = df[df["N"] > 0]
@@ -149,7 +222,7 @@ def add_time_bin(bp: Optional[float]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="汇总SLiM forward输出。")
+    parser = argparse.ArgumentParser(description="Summarize SLiM forward outputs.")
     parser.add_argument("--forward-dir", default="outputs/forward")
     parser.add_argument("--outdir", default="outputs/summary")
     args = parser.parse_args()
@@ -162,7 +235,7 @@ def main() -> None:
     gen_files = sorted(forward_dir.glob("*.forward_genetic.tsv"))
 
     if not demo_files:
-        raise FileNotFoundError(f"在{forward_dir}中未找到*.forward_demography.tsv文件")
+        raise FileNotFoundError(f"No *.forward_demography.tsv files found in {forward_dir}")
 
     demo_summary = pd.DataFrame([summarize_demography_file(p) for p in demo_files])
     demo_summary["demographic_extinction_bin"] = demo_summary["demographic_extinction_bp"].apply(add_time_bin)
@@ -174,22 +247,27 @@ def main() -> None:
 
     group_cols = ["scenario", "genetic_mode"]
 
-    probability = (
-        demo_summary
-        .groupby(group_cols, dropna=False)
-        .agg(
-            n_replicates=("file", "count"),
-            demographic_extinction_probability=("demographic_extinct", "mean"),
-            functional_extinction_probability=("functional_extinct", "mean"),
-            quasi_extinction_probability=("quasi_extinct", "mean"),
-            median_demographic_extinction_bp=("demographic_extinction_bp", "median"),
-            median_functional_extinction_bp=("functional_extinction_bp", "median"),
-            median_quasi_extinction_bp=("quasi_extinction_bp", "median"),
-            mean_final_N=("final_N", "mean"),
-            min_final_N=("final_N", "min"),
-        )
-        .reset_index()
+    agg_dict = dict(
+        n_replicates=("file", "count"),
+        demographic_extinction_probability=("demographic_extinct", "mean"),
+        functional_extinction_probability=("functional_extinct", "mean"),
+        quasi_extinction_probability=("quasi_extinct", "mean"),
+        median_demographic_extinction_bp=("demographic_extinction_bp", "median"),
+        median_functional_extinction_bp=("functional_extinction_bp", "median"),
+        median_quasi_extinction_bp=("quasi_extinction_bp", "median"),
+        mean_final_N=("final_N", "mean"),
+        min_final_N=("final_N", "min"),
+        total_births=("births_total_sum", "sum"),
+        total_births_own_OMU=("births_own_OMU_sum", "sum"),
+        total_births_other_OMU=("births_other_OMU_sum", "sum"),
+        total_births_AMU=("births_AMU_sum", "sum"),
     )
+
+    probability = demo_summary.groupby(group_cols, dropna=False).agg(**agg_dict).reset_index()
+
+    probability["births_own_OMU_fraction"] = probability["total_births_own_OMU"] / probability["total_births"].replace({0: pd.NA})
+    probability["births_other_OMU_fraction"] = probability["total_births_other_OMU"] / probability["total_births"].replace({0: pd.NA})
+    probability["births_AMU_fraction"] = probability["total_births_AMU"] / probability["total_births"].replace({0: pd.NA})
 
     probability_path = outdir / "extinction_probability_by_scenario.tsv"
     probability.to_csv(probability_path, sep="\t", index=False, float_format="%.6g")
@@ -210,7 +288,7 @@ def main() -> None:
     else:
         gen_summary_path = None
 
-    print("已写出:")
+    print("Wrote:")
     print(demo_summary_path)
     print(probability_path)
     print(time_dist_path)

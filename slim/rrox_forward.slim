@@ -628,7 +628,7 @@ function (void) updateEnvironmentForCurrentBP(void)
 function (void) initializeOutputFiles(void)
 {
     demoFile = OUT_PREFIX + ".forward_demography.tsv";
-    demoHeader = "cycle\tbp\tscenario\tgenetic_mode\tN\tK_t\tclimate_K_factor\thuman_K_factor\tq_hunting\tN_female\tN_male\tN_juvenile\tN_age0\tN_age1\tadult_females\tadult_males\tbreeding_females\tcandidate_fathers\tOMU_count\tAMU_males\tAMU_count_proxy\tAMU_males_per_OMU\tdominant_males\tno_breeder_years\tquasi_extinct\tfunctional_extinct\tdemographic_extinct\tmean_age\tdensity_factor";
+    demoHeader = "cycle\tbp\tstage\tscenario\tgenetic_mode\tN\tK_t\tclimate_K_factor\thuman_K_factor\tq_hunting\tN_female\tN_male\tN_juvenile\tN_age0\tN_age1\tbirths_total\tbirths_own_OMU\tbirths_other_OMU\tbirths_AMU\tadult_females\tadult_males\tbreeding_females\tcandidate_fathers\tOMU_count\tAMU_males\tAMU_count_proxy\tAMU_males_per_OMU\tdominant_males\tno_breeder_years\tquasi_extinct\tfunctional_extinct\tdemographic_extinct\tmean_age\tdensity_factor";
     writeFile(demoFile, demoHeader, append=F);
     sim.setValue("demo_file", demoFile);
 
@@ -661,6 +661,33 @@ function (logical) shouldWriteForwardStats(void)
     return (((sim.cycle - sim.getValue("forward_start_cycle")) % STAT_INTERVAL == 0) |
             currentBP == END_BP |
             p1.individualCount == 0);
+}
+
+function (void) resetBirthCounters(void)
+{
+    sim.setValue("births_total", 0);
+    sim.setValue("births_own_OMU", 0);
+    sim.setValue("births_other_OMU", 0);
+    sim.setValue("births_AMU", 0);
+    sim.setValue("last_father_category", "none");
+}
+
+function (void) incrementBirthCounter(string category)
+{
+    sim.setValue("births_total", sim.getValue("births_total") + 1);
+
+    if (category == "own_OMU")
+        sim.setValue("births_own_OMU", sim.getValue("births_own_OMU") + 1);
+    else
+    {
+        if (category == "other_OMU")
+            sim.setValue("births_other_OMU", sim.getValue("births_other_OMU") + 1);
+        else
+        {
+            if (category == "AMU")
+                sim.setValue("births_AMU", sim.getValue("births_AMU") + 1);
+        }
+    }
 }
 
 function (void) writeForwardQALog(string stage)
@@ -878,64 +905,115 @@ function (void) assignInitialSocialStructureFromLoadedTree(void)
     if (size(inds) == 0)
         return;
 
-    // tree sequence会保留遗传状态，但不可靠保留运行期社会结构tag/tagF。
-    // forward开始时基于加载个体的年龄和性别重建OMU/AMU结构。
-    inds.tag = 0;
-    inds.tagF = 0.0;
-
+    // 关键原则：forward读入burn-in .trees后，不再无条件清空tag/tagF。
+    // 新版burn-in会把OMU id、主雄标记、幼体母亲标记和雌性last_birth cycle
+    // 存在individual.tag/tagF中；这些信息必须保留，否则第一年会出现所有成年雌性
+    // 同步可繁殖的假象。
     females = inds[inds.sex == "F"];
     males = inds[inds.sex == "M"];
 
-    adultFemales = females[(females.age >= FEMALE_MIN_REP_AGE) &
-                           (females.age <= FEMALE_MAX_REP_AGE)];
+    reproductiveTaggedFemales = females[(females.age >= FEMALE_MIN_REP_AGE) &
+                                        (females.age <= FEMALE_MAX_REP_AGE) &
+                                        (females.tag > 0)];
 
-    if (size(adultFemales) == 0)
+    // 兼容旧版或损坏的burn-in .trees：如果没有任何带OMU标记的繁殖年龄雌性，
+    // 才重建社会结构。这个fallback不能恢复母婴依赖和last_birth信息，因此只用于
+    // 旧测试文件；正式分析必须重新生成新版burn-in .trees。
+    if (size(reproductiveTaggedFemales) == 0)
     {
-        omuId = getNextOMUId();
-        females.tag = omuId;
-        females.tagF = -999999.0;
-    }
-    else
-    {
-        adultFemales = sample(adultFemales, size(adultFemales), replace=F);
-        nOMU = asInteger(ceil(size(adultFemales) / OMU_FEMALES));
+        catn("WARNING: loaded .trees contains no tagged reproductive females; rebuilding social structure. Regenerate burn-in .trees for formal runs.");
 
-        for (i in 0:(nOMU - 1))
+        inds.tag = 0;
+        inds.tagF = 0.0;
+
+        adultFemales = females[(females.age >= FEMALE_MIN_REP_AGE) &
+                               (females.age <= FEMALE_MAX_REP_AGE)];
+
+        if (size(adultFemales) == 0)
         {
             omuId = getNextOMUId();
-            start = i * OMU_FEMALES;
-            end = min(c(start + OMU_FEMALES - 1, size(adultFemales) - 1));
-            group = adultFemales[start:end];
-            group.tag = omuId;
-            group.tagF = -999999.0;
+            females.tag = omuId;
+            females.tagF = -999999.0;
+        }
+        else
+        {
+            adultFemales = sample(adultFemales, size(adultFemales), replace=F);
+            nOMU = asInteger(ceil(size(adultFemales) / OMU_FEMALES));
+
+            for (i in 0:(nOMU - 1))
+            {
+                omuId = getNextOMUId();
+                start = i * OMU_FEMALES;
+                end = min(c(start + OMU_FEMALES - 1, size(adultFemales) - 1));
+                group = adultFemales[start:end];
+                group.tag = omuId;
+                group.tagF = -999999.0;
+            }
+
+            omuIds = sort(unique(adultFemales.tag));
+            juvenileFemales = females[females.age < FEMALE_MIN_REP_AGE];
+            if (size(juvenileFemales) > 0)
+            {
+                juvenileFemales.tag = sample(omuIds, size(juvenileFemales), replace=T);
+                juvenileFemales.tagF = -999999.0;
+            }
         }
 
-        omuIds = sort(unique(adultFemales.tag));
-        juvenileFemales = females[females.age < FEMALE_MIN_REP_AGE];
-        if (size(juvenileFemales) > 0)
+        omuIdsAll = sort(unique(females.tag));
+        omuIdsAll = omuIdsAll[omuIdsAll > 0];
+
+        maleJuveniles = males[males.age < MALE_DISPERSAL_AGE];
+        if (size(maleJuveniles) > 0 & size(omuIdsAll) > 0)
         {
-            juvenileFemales.tag = sample(omuIds, size(juvenileFemales), replace=T);
-            juvenileFemales.tagF = -999999.0;
+            maleJuveniles.tag = sample(omuIdsAll, size(maleJuveniles), replace=T);
+            maleJuveniles.tagF = 0.0;
         }
+
+        amuMales = males[males.age >= MALE_DISPERSAL_AGE];
+        if (size(amuMales) > 0)
+        {
+            amuMales.tag = 0;
+            amuMales.tagF = 0.0;
+        }
+
+        cleanupDominantMales();
+        replaceDominantMales();
+        return;
     }
 
-    omuIdsAll = sort(unique(females.tag));
-    omuIdsAll = omuIdsAll[omuIdsAll > 0];
+    // 正常路径：保留burn-in携带的社会结构，只做最小清理。
+    omuIds = sort(unique(reproductiveTaggedFemales.tag));
+    omuIds = omuIds[omuIds > 0];
 
-    maleJuveniles = males[males.age < MALE_DISPERSAL_AGE];
-    if (size(maleJuveniles) > 0 & size(omuIdsAll) > 0)
+    // 少数无OMU雌性分配到现有有效繁殖OMU；不清空已有母婴/last_birth信息。
+    unassignedFemales = females[females.tag <= 0];
+    if (size(unassignedFemales) > 0 & size(omuIds) > 0)
     {
-        maleJuveniles.tag = sample(omuIdsAll, size(maleJuveniles), replace=T);
+        unassignedFemales.tag = sample(omuIds, size(unassignedFemales), replace=T);
+        adultUnassigned = unassignedFemales[unassignedFemales.age >= FEMALE_MIN_REP_AGE];
+        if (size(adultUnassigned) > 0)
+            adultUnassigned.tagF = -999999.0;
+    }
+
+    // 雄性未达到迁出年龄时应保留在OMU；若没有OMU则随机分入有效OMU。
+    maleJuveniles = males[(males.age < MALE_DISPERSAL_AGE) & (males.tag <= 0)];
+    if (size(maleJuveniles) > 0 & size(omuIds) > 0)
+    {
+        maleJuveniles.tag = sample(omuIds, size(maleJuveniles), replace=T);
         maleJuveniles.tagF = 0.0;
     }
 
-    amuMales = males[males.age >= MALE_DISPERSAL_AGE];
-    if (size(amuMales) > 0)
+    // 达到迁出年龄且不是主雄的雄性进入AMU池。
+    nonDomDispersedMales = males[(males.age >= MALE_DISPERSAL_AGE) &
+                                 (males.tagF != 1.0)];
+    if (size(nonDomDispersedMales) > 0)
     {
-        amuMales.tag = 0;
-        amuMales.tagF = 0.0;
+        nonDomDispersedMales.tag = 0;
+        nonDomDispersedMales.tagF = 0.0;
     }
 
+    resetNewAdultFemaleTags();
+    cleanupDominantMales();
     replaceDominantMales();
 }
 
@@ -1226,6 +1304,7 @@ function (object) getCandidateFathers(void)
 function (object) chooseFather(object female)
 {
     inds = p1.individuals;
+    sim.setValue("last_father_category", "none");
 
     own = inds[(inds.sex == "M") &
                (inds.tag == female.tag) &
@@ -1255,12 +1334,7 @@ function (object) chooseFather(object female)
         weights[2] = 0.0;
 
     if (sum(weights) <= 0.0)
-    {
-        if (NO_FATHER_NO_REPRODUCTION == 1)
-            return NULL;
-        else
-            return NULL;
-    }
+        return NULL;
 
     if (DYNAMIC_PATERNITY_RENORMALIZE == 1)
         weights = weights / sum(weights);
@@ -1268,11 +1342,18 @@ function (object) chooseFather(object female)
     category = sample(0:2, 1, replace=F, weights=weights);
 
     if (category == 0)
+    {
+        sim.setValue("last_father_category", "own_OMU");
         return sample(own, 1);
+    }
 
     if (category == 1)
+    {
+        sim.setValue("last_father_category", "other_OMU");
         return sample(other, 1);
+    }
 
+    sim.setValue("last_father_category", "AMU");
     return sample(amu, 1);
 }
 
@@ -1447,7 +1528,7 @@ function (integer) countFixedDelMuts(void)
     return size(delSubs);
 }
 
-function (void) writeDemographyStats(void)
+function (void) writeDemographyStats(string stage)
 {
     inds = p1.individuals;
     N = size(inds);
@@ -1455,12 +1536,17 @@ function (void) writeDemographyStats(void)
 
     if (N == 0)
     {
-        line = sim.cycle + "\t" + bp + "\t" + SCENARIO + "\t" + GENETIC_MODE +
+        line = sim.cycle + "\t" + bp + "\t" + stage + "\t" + SCENARIO + "\t" + GENETIC_MODE +
                "\t0\t" + sim.getValue("K_t") +
                "\t" + sim.getValue("climate_factor_t") +
                "\t" + sim.getValue("human_factor_t") +
                "\t" + sim.getValue("hunting_q_t") +
-                 "\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\tNA\t0\t" +
+               "\t0\t0\t0\t0\t0\t" +
+               sim.getValue("births_total") + "\t" +
+               sim.getValue("births_own_OMU") + "\t" +
+               sim.getValue("births_other_OMU") + "\t" +
+               sim.getValue("births_AMU") +
+               "\t0\t0\t0\t0\t0\t0\t0\tNA\t0\t" +
                sim.getValue("no_breeder_years") +
                "\t1\t1\t1\tNA\t" + sim.getValue("density_factor");
         writeFile(sim.getValue("demo_file"), line, append=T);
@@ -1499,6 +1585,7 @@ function (void) writeDemographyStats(void)
 
     line = sim.cycle + "\t" +
            bp + "\t" +
+           stage + "\t" +
            SCENARIO + "\t" +
            GENETIC_MODE + "\t" +
            N + "\t" +
@@ -1511,6 +1598,10 @@ function (void) writeDemographyStats(void)
            size(juveniles) + "\t" +
            size(age0) + "\t" +
            size(age1) + "\t" +
+           sim.getValue("births_total") + "\t" +
+           sim.getValue("births_own_OMU") + "\t" +
+           sim.getValue("births_other_OMU") + "\t" +
+           sim.getValue("births_AMU") + "\t" +
            size(adultFemales) + "\t" +
            size(adultMales) + "\t" +
            size(breedingFemales) + "\t" +
@@ -1720,6 +1811,7 @@ mutation(m2)
     sim.setValue("demographic_extinct", F);
     sim.setValue("density_factor", 1.0);
     sim.setValue("next_omu_id", 1);
+    resetBirthCounters();
 
     sim.readFromPopulationFile(BURNIN_TREES_IN);
 
@@ -1755,7 +1847,7 @@ mutation(m2)
     if (TREESEQ_SAVE_KEYPOINTS == 1)
         treeSeqSave("bp" + START_BP);
 
-    writeDemographyStats();
+    writeDemographyStats("pre_breeding");
     writeGeneticStats();
 
     catn("Initialized forward run:");
@@ -1775,6 +1867,7 @@ first()
 
     if (sim.cycle > startCycle)
     {
+        resetBirthCounters();
         updateEnvironmentForCurrentBP();
         updateSocialStructure();
         if (shouldWriteForwardStats())
@@ -1812,6 +1905,7 @@ reproduction()
         child.age = 0;
         child.tag = individual.tag;
         child.tagF = motherTagF(individual);
+        incrementBirthCounter(sim.getValue("last_father_category"));
 
         if (NEWBORNS_EXPERIENCE_AGE0_MORTALITY == 1)
         {
@@ -1836,7 +1930,7 @@ late()
     shouldWriteDemo = shouldWriteForwardStats();
     if (shouldWriteDemo)
     {
-        writeDemographyStats();
+        writeDemographyStats("post_mortality");
         writeForwardQALog("post_mortality");
     }
 
