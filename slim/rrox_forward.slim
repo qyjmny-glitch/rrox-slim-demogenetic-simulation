@@ -15,6 +15,7 @@
 //
 // 主要输入文件：
 //   BURNIN_TREES_IN
+//   BURNIN_SOCIAL_STATE_IN
 //   LIFE_TABLE_FILE:        age annual_mortality
 //   CLIMATE_FILE:           bp climate_K_factor
 //   HUMAN_FILE:             bp cropland_area cropland_pressure human_K_factor
@@ -49,6 +50,7 @@ function (void) validateScalarParams(void)
     requireParam("QUASI_EXT_N");
     requireParam("SAVE_TREES");
     requireParam("BURNIN_TREES_IN");
+    requireParam("BURNIN_SOCIAL_STATE_IN");
     requireParam("TREESEQ_SAVE_KEYPOINTS");
 
     // 输入文件
@@ -897,6 +899,67 @@ function (integer) countDuplicateDominantMales(void)
     }
 
     return n;
+}
+
+function (void) readBurninSocialState(string path)
+{
+    lines = readFile(path);
+
+    if (size(lines) < 1)
+        stop("ERROR: BURNIN_SOCIAL_STATE_IN is empty: " + path);
+
+    header = strsplit(lines[0], "\t");
+    if (size(header) < 5)
+        stop("ERROR: BURNIN_SOCIAL_STATE_IN header must contain pedigreeID, sex, age, omu_id, tagF.");
+
+    if (header[0] != "pedigreeID" | header[1] != "sex" | header[2] != "age" |
+        header[3] != "omu_id" | header[4] != "tagF")
+        stop("ERROR: BURNIN_SOCIAL_STATE_IN header must be: pedigreeID<TAB>sex<TAB>age<TAB>omu_id<TAB>tagF.");
+
+    inds = p1.individuals;
+    matchedPedigreeIds = integer(0);
+
+    if (size(lines) > 1)
+    {
+        for (i in 1:(size(lines) - 1))
+        {
+            if (lines[i] == "")
+                next;
+
+            fields = strsplit(lines[i], "\t");
+            if (size(fields) < 5)
+                stop("ERROR: bad social state row: " + lines[i]);
+
+            pedigreeID = asInteger(fields[0]);
+            sex = fields[1];
+            age = asInteger(fields[2]);
+            omuId = asInteger(fields[3]);
+            tagFValue = asFloat(fields[4]);
+
+            if (size(matchedPedigreeIds[matchedPedigreeIds == pedigreeID]) > 0)
+                stop("ERROR: duplicate pedigreeID in BURNIN_SOCIAL_STATE_IN: " + pedigreeID);
+
+            match = inds[inds.pedigreeID == pedigreeID];
+            if (size(match) != 1)
+                stop("ERROR: social_state pedigreeID not found exactly once in loaded .trees: " + pedigreeID);
+
+            if (match.sex != sex)
+                stop("ERROR: social_state sex mismatch for pedigreeID " + pedigreeID);
+
+            if (match.age != age)
+                stop("ERROR: social_state age mismatch for pedigreeID " + pedigreeID);
+
+            match.tag = omuId;
+            match.tagF = tagFValue;
+            matchedPedigreeIds = c(matchedPedigreeIds, pedigreeID);
+        }
+    }
+
+    for (ind in inds)
+    {
+        if (size(matchedPedigreeIds[matchedPedigreeIds == ind.pedigreeID]) != 1)
+            stop("ERROR: loaded .trees individual missing from BURNIN_SOCIAL_STATE_IN: " + ind.pedigreeID);
+    }
 }
 
 function (void) assignInitialSocialStructureFromLoadedTree(void)
@@ -1809,6 +1872,8 @@ mutation(m2)
     sim.setValue("no_breeder_years", 0);
     sim.setValue("functional_extinct", F);
     sim.setValue("demographic_extinct", F);
+    sim.setValue("functional_extinction_recorded", F);
+    sim.setValue("quasi_extinction_recorded", F);
     sim.setValue("density_factor", 1.0);
     sim.setValue("next_omu_id", 1);
     resetBirthCounters();
@@ -1821,7 +1886,7 @@ mutation(m2)
     forwardEndCycle = sim.cycle + FORWARD_YEARS;
     sim.setValue("forward_end_cycle", forwardEndCycle);
     community.rescheduleScriptBlock(s1, start=forwardEndCycle, end=forwardEndCycle);
-    assignInitialSocialStructureFromLoadedTree();
+    readBurninSocialState(BURNIN_SOCIAL_STATE_IN);
 
     // 确保后续OMU id不会与已加载的OMU tag冲突。
     inds = p1.individuals;
@@ -1838,11 +1903,12 @@ mutation(m2)
     initializeOutputFiles();
 
     updateEnvironmentForCurrentBP();
+    cleanupDominantMales();
     updateSocialStructure();
     writeForwardQALog("pre_breeding");
     applyForwardSurvivalScaling();
 
-    writeEvent("start_forward", "Loaded burn-in tree sequence: " + BURNIN_TREES_IN);
+    writeEvent("start_forward", "Loaded burn-in tree sequence: " + BURNIN_TREES_IN + "; social state: " + BURNIN_SOCIAL_STATE_IN);
 
     if (TREESEQ_SAVE_KEYPOINTS == 1)
         treeSeqSave("bp" + START_BP);
@@ -1854,6 +1920,7 @@ mutation(m2)
     catn("  SCENARIO     = " + SCENARIO);
     catn("  GENETIC_MODE = " + GENETIC_MODE);
     catn("  BURNIN_IN    = " + BURNIN_TREES_IN);
+    catn("  SOCIAL_IN    = " + BURNIN_SOCIAL_STATE_IN);
     catn("  START_BP     = " + START_BP);
     catn("  END_BP       = " + END_BP);
     catn("  N_loaded     = " + p1.individualCount);

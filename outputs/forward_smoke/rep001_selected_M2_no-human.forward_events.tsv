@@ -1,5 +1,7 @@
 cycle	bp	event	N	message
-50	100	start_forward	105	Loaded burn-in tree sequence: outputs/burnin/burnin_rep001_selected_K100.trees
+50	100	start_forward	105	Loaded burn-in tree sequence: outputs/burnin/burnin_rep001_selected_K100.trees; social state: outputs/burnin/burnin_rep001_selected_K100.social_state.tsv
 50	100	treeSeqOutput	105	outputs/forward_smoke/rep001_selected_M2_no-human.bp100.trees
-150	0	end_forward	96	Reached END_BP.
-150	0	treeSeqOutput	96	outputs/forward_smoke/rep001_selected_M2_no-human.bp0.trees
+108	42	functional_extinction	101	no_breeder_years >= 5 at bp 42
+108	42	treeSeqOutput	101	outputs/forward_smoke/rep001_selected_M2_no-human.functional_extinction_bp42.trees
+150	0	end_forward	107	Reached END_BP.
+150	0	treeSeqOutput	107	outputs/forward_smoke/rep001_selected_M2_no-human.bp0.trees

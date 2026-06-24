@@ -11,6 +11,10 @@
 // 主要外部输入：
 //   LIFE_TABLE_FILE: age annual_mortality
 //
+// 主要外部输出：
+//   BURNIN_TREES_OUT: burn-in结束时保存的tree-sequence文件
+//   BURNIN_SOCIAL_STATE_OUT: burn-in结束时保存的社会状态表，用于forward恢复OMU/AMU/tagF
+//
 // 主要外部参数由Python runner从core_params.psv、life_history_params.psv、
 // social_params.psv、genetic_params.psv和genome_structure.psv传入。
 
@@ -34,6 +38,7 @@ function (void) validateScalarParams(void)
     requireParam("INITIAL_N");
     requireParam("SAVE_TREES");
     requireParam("BURNIN_TREES_OUT");
+    requireParam("BURNIN_SOCIAL_STATE_OUT");
     requireParam("SAMPLE_SIZE");
 
     // 生活史参数
@@ -556,6 +561,52 @@ function (void) writeBurninQALog(string stage)
            duplicateDominantMales;
 
     writeFile(sim.getValue("burnin_qa_file"), line, append=T);
+}
+
+function (string) socialRole(object ind)
+{
+    if (ind.sex == "M")
+    {
+        if (ind.tagF == 1.0 & ind.tag > 0)
+            return "dominant_male";
+        if (ind.tag == 0 & ind.age >= MALE_DISPERSAL_AGE)
+            return "AMU_male";
+        if (ind.tag > 0)
+            return "OMU_male";
+        return "unassigned_male";
+    }
+
+    if (ind.sex == "F")
+    {
+        if (ind.age < FEMALE_MIN_REP_AGE)
+            return "juvenile_female";
+        if (ind.tag > 0)
+            return "OMU_female";
+        return "unassigned_female";
+    }
+
+    return "unknown";
+}
+
+function (void) writeSocialState(string path)
+{
+    header = "pedigreeID\tsex\tage\tomu_id\ttagF\tsocial_role";
+    writeFile(path, header, append=F);
+
+    inds = p1.individuals;
+    if (size(inds) == 0)
+        return;
+
+    for (ind in inds)
+    {
+        line = ind.pedigreeID + "\t" +
+               ind.sex + "\t" +
+               ind.age + "\t" +
+               ind.tag + "\t" +
+               ind.tagF + "\t" +
+               socialRole(ind);
+        writeFile(path, line, append=T);
+    }
 }
 
 function (void) assignInitialAgesAndSexStructure(void)
@@ -1310,6 +1361,8 @@ late()
     if (p1.individualCount == 0)
     {
         catn("WARNING: population went extinct during burn-in at cycle " + sim.cycle);
+        writeSocialState(BURNIN_SOCIAL_STATE_OUT);
+        catn("Saved burn-in social state: " + BURNIN_SOCIAL_STATE_OUT);
         if (SAVE_TREES == 1)
             sim.treeSeqOutput(BURNIN_TREES_OUT);
         sim.simulationFinished();
@@ -1322,6 +1375,9 @@ late()
             sim.treeSeqOutput(BURNIN_TREES_OUT);
             catn("Saved burn-in tree sequence: " + BURNIN_TREES_OUT);
         }
+
+        writeSocialState(BURNIN_SOCIAL_STATE_OUT);
+        catn("Saved burn-in social state: " + BURNIN_SOCIAL_STATE_OUT);
 
         catn("Finished burn-in at cycle " + sim.cycle + ", N = " + p1.individualCount);
         sim.simulationFinished();

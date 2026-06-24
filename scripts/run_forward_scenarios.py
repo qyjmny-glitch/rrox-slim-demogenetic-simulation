@@ -88,11 +88,13 @@ def main() -> None:
         for genetic_mode in genetic_modes:
             if args.k_label:
                 burnin_tree = burnin_dir / f"burnin_rep{rep:03d}_{genetic_mode}_{args.k_label}.trees"
+                burnin_social_state = burnin_dir / f"burnin_rep{rep:03d}_{genetic_mode}_{args.k_label}.social_state.tsv"
             else:
                 # 匹配run_burnin_grid.py在包含K时的默认标签格式。
                 # 如果burn-in文件名不同，请使用--k-label或调整这个模板。
                 k_int = int(round(float(base_params["K5200"])))
                 burnin_tree = burnin_dir / f"burnin_rep{rep:03d}_{genetic_mode}_K{k_int}.trees"
+                burnin_social_state = burnin_dir / f"burnin_rep{rep:03d}_{genetic_mode}_K{k_int}.social_state.tsv"
 
             for scenario in scenarios:
                 if scenario not in {"M1", "M2", "M3", "M4"}:
@@ -115,6 +117,7 @@ def main() -> None:
                         + (0 if genetic_mode == "selected" else 500000)
                     )
                     params["BURNIN_TREES_IN"] = str(burnin_tree)
+                    params["BURNIN_SOCIAL_STATE_IN"] = str(burnin_social_state)
                     params["CLIMATE_FILE"] = str(climate_file)
 
                     if scenario in {"M3", "M4"}:

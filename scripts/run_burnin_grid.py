@@ -36,6 +36,8 @@ NON_CONFIG_PARAM_DESCRIPTIONS = {
     "OUT_PREFIX": "runner生成：输出文件名前缀，各类结果文件会在此基础上添加后缀。",
     "BURNIN_TREES_OUT": "runner生成：burn-in结束后保存的tree-sequence文件路径。",
     "BURNIN_TREES_IN": "runner生成：forward阶段读取的burn-in tree-sequence文件路径。",
+    "BURNIN_SOCIAL_STATE_OUT": "runner生成：burn-in结束后保存的社会状态TSV路径，用于forward恢复OMU/AMU/tagF。",
+    "BURNIN_SOCIAL_STATE_IN": "runner生成：forward阶段读取的burn-in社会状态TSV路径，应与BURNIN_TREES_IN成对使用。",
     "SCENARIO": "runner生成：forward情景编号，M1基线，M2气候，M3人类活动，M4联合情景。",
     "CLIMATE_FILE": "runner生成：气候适宜栖息地K因子逐年表路径。",
     "HUMAN_FILE": "runner生成：人类活动K因子逐年表路径。",
@@ -314,6 +316,7 @@ def main() -> None:
                 label = f"rep{rep:03d}_{genetic_mode}_K{int(round(k))}"
                 params["OUT_PREFIX"] = str(outdir / label)
                 params["BURNIN_TREES_OUT"] = str(outdir / f"burnin_{label}.trees")
+                params["BURNIN_SOCIAL_STATE_OUT"] = str(outdir / f"burnin_{label}.social_state.tsv")
 
                 cmd = build_slim_command(args.slim_bin, slim_script, params)
                 command_specs.append((cmd, params, label))
