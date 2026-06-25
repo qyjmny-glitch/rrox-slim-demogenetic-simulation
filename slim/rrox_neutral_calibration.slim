@@ -1,0 +1,1399 @@
+// rrox_neutral_calibration.slim
+// 川金丝猴阶段1：中性校准模型
+// SLiM 5.2, nonWF, 1 tick = 1年
+//
+// 本脚本专门用于 neutral calibration，不参与 selected burn-in 或 forward。
+// 它复制 rrox_burnin.slim 中已验证的生活史、繁殖、存活和 OMU/AMU 社会结构，
+// 但把遗传输入固定为纯中性突变，并周期性输出 pi_neutral、Ne_pi、Ne_pi/K 和 Nc/K。
+//
+// 预期运行方式：
+// slim -d RUN_MODE='"neutral_calibration"' -d GENETIC_MODE='"neutral"' ... slim/rrox_neutral_calibration.slim
+//
+// 主要外部输入：
+//   LIFE_TABLE_FILE: age annual_mortality
+//
+// 主要外部输出：
+//   NEUTRAL_CALIBRATION_OUT: 周期性中性校准统计表
+//   BURNIN_TREES_OUT: 校准结束时保存的tree-sequence文件
+//   BURNIN_SOCIAL_STATE_OUT: 校准结束时保存的社会状态表
+//
+// 主要外部参数由 scripts/run_stage1_neutral_calibration.py 从阶段1参数表和基础参数表传入。
+
+function (void) requireParam(string name)
+{
+    if (!exists(name))
+        stop("ERROR: required parameter is missing: " + name);
+}
+
+function (void) validateScalarParams(void)
+{
+    // 核心参数
+    requireParam("RUN_MODE");
+    requireParam("GENETIC_MODE");
+    requireParam("REPLICATE_ID");
+    requireParam("RANDOM_SEED");
+    requireParam("OUT_PREFIX");
+    requireParam("BURNIN_YEARS");
+    requireParam("BURNIN_LOG_INTERVAL");
+    requireParam("K5200");
+    requireParam("INITIAL_N");
+    requireParam("SAVE_TREES");
+    requireParam("BURNIN_TREES_OUT");
+    requireParam("BURNIN_SOCIAL_STATE_OUT");
+    requireParam("NEUTRAL_CALIBRATION_OUT");
+    requireParam("SAMPLE_SIZE");
+
+    // 生活史参数
+    requireParam("GENERATION_TIME");
+    requireParam("MAX_AGE");
+    requireParam("LIFE_TABLE_FILE");
+    requireParam("FEMALE_MIN_REP_AGE");
+    requireParam("FEMALE_MAX_REP_AGE");
+    requireParam("MALE_MIN_REP_AGE");
+    requireParam("MALE_MAX_REP_AGE");
+    requireParam("DOM_MALE_MIN_AGE");
+    requireParam("DOM_MALE_MAX_AGE");
+    requireParam("MALE_SENESCENCE_AGE");
+    requireParam("MALE_DOMINANCE_BACKUP_MIN_AGE");
+    requireParam("MALE_DOMINANCE_BACKUP_MAX_AGE");
+    requireParam("MALE_DISPERSAL_AGE");
+    requireParam("DEPENDENCE_AGE");
+    requireParam("INTERBIRTH_INTERVAL");
+    requireParam("INTERBIRTH_IF_INFANT_DIES");
+    requireParam("LITTER_SIZE");
+    requireParam("SEX_RATIO_AT_BIRTH");
+    requireParam("REQUIRE_NO_DEPENDENT_INFANT");
+
+    // 社会结构参数
+    requireParam("SOCIAL_STRUCTURE_MODE");
+    requireParam("OMU_FEMALES");
+    requireParam("OMU_SPLIT_THRESHOLD");
+    requireParam("OMU_SPLIT_FEMALES");
+    requireParam("OMU_DISSOLVE_FEMALES");
+    requireParam("OMU_STABLE_INHERITANCE");
+    requireParam("FEMALE_DISPERSAL");
+    requireParam("FEMALE_STAY_NATAL_OMU");
+    requireParam("MALE_LEAVE_NATAL_OMU");
+    requireParam("AMU_TARGET_SIZE");
+    requireParam("AMU_MALES_PER_OMU");
+    requireParam("AMU_GROUPING_MODE");
+    requireParam("AMU_POOL_RULE");
+    requireParam("SOLITARY_MALE_MODE");
+    requireParam("SOLITARY_MALES_TO_AMU");
+    requireParam("DOM_MALE_ASSIGNMENT_MODE");
+    requireParam("DOM_MALE_REPLACEMENT_SOURCE");
+    requireParam("DOM_MALE_RETIRE_AT_MAX_AGE");
+    requireParam("DOM_MALE_REPLACEMENT_ON_DEATH");
+    requireParam("DOM_MALE_BACKUP_ALLOWED");
+    requireParam("DOM_MALE_TAKEOVER_MODE");
+    requireParam("DOM_MALE_RANDOM_WITHIN_CANDIDATES");
+    requireParam("DOM_MALE_RETIRED_TO_AMU");
+    requireParam("P_OWN_OMU");
+    requireParam("P_OTHER_OMU");
+    requireParam("P_AMU");
+    requireParam("PATERNITY_WEIGHTS_SUM");
+    requireParam("DYNAMIC_PATERNITY_RENORMALIZE");
+    requireParam("NO_FATHER_NO_REPRODUCTION");
+    requireParam("OWN_OMU_FATHER_RULE");
+    requireParam("OTHER_OMU_FATHER_RULE");
+    requireParam("AMU_FATHER_RULE");
+    requireParam("FATHER_CHOICE_WITHIN_CATEGORY");
+    requireParam("INITIAL_OMU_ASSIGNMENT");
+    requireParam("INITIAL_DOM_MALE_ASSIGNMENT");
+    requireParam("INITIAL_AMU_ASSIGNMENT");
+    requireParam("INITIAL_AMU_GROUPING");
+    requireParam("ALLOW_OMU_SPLIT");
+    requireParam("SPLIT_REQUIRES_DOM_MALE");
+    requireParam("ALLOW_OMU_DISSOLUTION");
+    requireParam("EMPTY_OMU_INDIVIDUALS_TO_AMU");
+    requireParam("USE_KIN_AVOIDANCE");
+    requireParam("MAX_CHILD_FPED");
+
+    // 基因组和DFE参数
+    requireParam("MU_RATE");
+    requireParam("CHROM_COUNT");
+    requireParam("GENE_COUNT");
+    requireParam("GENE_LENGTH");
+    requireParam("NEUTRAL_FRACTION");
+    requireParam("DELETERIOUS_FRACTION");
+    requireParam("DFE_MEAN");
+    requireParam("DFE_SHAPE");
+    requireParam("INTERGENIC_RECOMB_RATE");
+
+    if (RUN_MODE != "neutral_calibration")
+        stop("ERROR: rrox_neutral_calibration.slim requires RUN_MODE = neutral_calibration.");
+
+    if (GENETIC_MODE != "neutral")
+        stop("ERROR: neutral calibration requires GENETIC_MODE = neutral.");
+
+    if (BURNIN_YEARS < 1)
+        stop("ERROR: BURNIN_YEARS must be >= 1.");
+
+    if (BURNIN_LOG_INTERVAL < 1)
+        stop("ERROR: BURNIN_LOG_INTERVAL must be >= 1.");
+
+    if (K5200 <= 0)
+        stop("ERROR: K5200 must be > 0.");
+
+    if (INITIAL_N < 2)
+        stop("ERROR: INITIAL_N must be >= 2.");
+
+    if (GENERATION_TIME <= 0)
+        stop("ERROR: GENERATION_TIME must be > 0.");
+
+    if (MAX_AGE < 1)
+        stop("ERROR: MAX_AGE must be >= 1.");
+
+    if (FEMALE_MIN_REP_AGE < 0 | FEMALE_MAX_REP_AGE < FEMALE_MIN_REP_AGE)
+        stop("ERROR: invalid female reproductive age range.");
+
+    if (MALE_MIN_REP_AGE < 0 | MALE_MAX_REP_AGE < MALE_MIN_REP_AGE)
+        stop("ERROR: invalid male reproductive age range.");
+
+    if (DOM_MALE_MAX_AGE < DOM_MALE_MIN_AGE)
+        stop("ERROR: invalid dominant male age range.");
+
+    if (MALE_DOMINANCE_BACKUP_MAX_AGE < MALE_DOMINANCE_BACKUP_MIN_AGE)
+        stop("ERROR: invalid backup dominant male age range.");
+
+    if (OMU_FEMALES < 1)
+        stop("ERROR: OMU_FEMALES must be >= 1.");
+
+    if (OMU_SPLIT_THRESHOLD <= OMU_FEMALES)
+        stop("ERROR: OMU_SPLIT_THRESHOLD should be larger than OMU_FEMALES.");
+
+    if (OMU_DISSOLVE_FEMALES < 0)
+        stop("ERROR: OMU_DISSOLVE_FEMALES must be >= 0.");
+
+    if (AMU_TARGET_SIZE < 1)
+        stop("ERROR: AMU_TARGET_SIZE must be >= 1.");
+
+    if (AMU_MALES_PER_OMU < 0.0)
+        stop("ERROR: AMU_MALES_PER_OMU must be >= 0.");
+
+    if (SOCIAL_STRUCTURE_MODE != "explicit_OMU_AMU")
+        stop("ERROR: only SOCIAL_STRUCTURE_MODE = explicit_OMU_AMU is implemented.");
+
+    if (OMU_STABLE_INHERITANCE != 1)
+        stop("ERROR: this model implements stable OMU inheritance; set OMU_STABLE_INHERITANCE = 1.");
+
+    if (FEMALE_DISPERSAL != 0 | FEMALE_STAY_NATAL_OMU != 1)
+        stop("ERROR: this model expects FEMALE_DISPERSAL = 0 and FEMALE_STAY_NATAL_OMU = 1.");
+
+    if (MALE_LEAVE_NATAL_OMU != 0 & MALE_LEAVE_NATAL_OMU != 1)
+        stop("ERROR: MALE_LEAVE_NATAL_OMU must be 0 or 1.");
+
+    if (AMU_GROUPING_MODE != "by_target_size" | INITIAL_AMU_GROUPING != "by_AMU_TARGET_SIZE")
+        stop("ERROR: only AMU grouping by target size is supported.");
+
+    if (AMU_POOL_RULE != "remaining_males" | INITIAL_AMU_ASSIGNMENT != "remaining_males")
+        stop("ERROR: this model expects remaining males to enter AMU.");
+
+    if (SOLITARY_MALE_MODE != "none" | SOLITARY_MALES_TO_AMU != 1)
+        stop("ERROR: solitary males are not modeled separately; set SOLITARY_MALE_MODE = none and SOLITARY_MALES_TO_AMU = 1.");
+
+    if (DOM_MALE_ASSIGNMENT_MODE != "age_priority_random" | INITIAL_DOM_MALE_ASSIGNMENT != "age_priority_random")
+        stop("ERROR: only age_priority_random dominant male assignment is implemented.");
+
+    if (DOM_MALE_REPLACEMENT_SOURCE != "AMU")
+        stop("ERROR: only DOM_MALE_REPLACEMENT_SOURCE = AMU is implemented.");
+
+    if (DOM_MALE_RETIRE_AT_MAX_AGE != 0 & DOM_MALE_RETIRE_AT_MAX_AGE != 1)
+        stop("ERROR: DOM_MALE_RETIRE_AT_MAX_AGE must be 0 or 1.");
+
+    if (DOM_MALE_REPLACEMENT_ON_DEATH != 0 & DOM_MALE_REPLACEMENT_ON_DEATH != 1)
+        stop("ERROR: DOM_MALE_REPLACEMENT_ON_DEATH must be 0 or 1.");
+
+    if (DOM_MALE_BACKUP_ALLOWED != 0 & DOM_MALE_BACKUP_ALLOWED != 1)
+        stop("ERROR: DOM_MALE_BACKUP_ALLOWED must be 0 or 1.");
+
+    if (DOM_MALE_TAKEOVER_MODE != "vacancy_only")
+        stop("ERROR: only DOM_MALE_TAKEOVER_MODE = vacancy_only is implemented.");
+
+    if (DOM_MALE_RANDOM_WITHIN_CANDIDATES != 0 & DOM_MALE_RANDOM_WITHIN_CANDIDATES != 1)
+        stop("ERROR: DOM_MALE_RANDOM_WITHIN_CANDIDATES must be 0 or 1.");
+
+    if (DOM_MALE_RETIRED_TO_AMU != 1)
+        stop("ERROR: this model expects retired dominant males to return to AMU.");
+
+    if (OWN_OMU_FATHER_RULE != "dominant_male_only")
+        stop("ERROR: only OWN_OMU_FATHER_RULE = dominant_male_only is implemented.");
+
+    if (OTHER_OMU_FATHER_RULE != "dominant_males_only")
+        stop("ERROR: only OTHER_OMU_FATHER_RULE = dominant_males_only is implemented.");
+
+    if (AMU_FATHER_RULE != "reproductive_age_AMU_male")
+        stop("ERROR: only AMU_FATHER_RULE = reproductive_age_AMU_male is implemented.");
+
+    if (FATHER_CHOICE_WITHIN_CATEGORY != "random")
+        stop("ERROR: only random father choice within category is implemented.");
+
+    if (INITIAL_OMU_ASSIGNMENT != "adult_females_by_OMU_SIZE")
+        stop("ERROR: only INITIAL_OMU_ASSIGNMENT = adult_females_by_OMU_SIZE is implemented.");
+
+    if (ALLOW_OMU_SPLIT != 0 & ALLOW_OMU_SPLIT != 1)
+        stop("ERROR: ALLOW_OMU_SPLIT must be 0 or 1.");
+
+    if (SPLIT_REQUIRES_DOM_MALE != 0 & SPLIT_REQUIRES_DOM_MALE != 1)
+        stop("ERROR: SPLIT_REQUIRES_DOM_MALE must be 0 or 1.");
+
+    if (ALLOW_OMU_DISSOLUTION != 0 & ALLOW_OMU_DISSOLUTION != 1)
+        stop("ERROR: ALLOW_OMU_DISSOLUTION must be 0 or 1.");
+
+    if (EMPTY_OMU_INDIVIDUALS_TO_AMU != 0 & EMPTY_OMU_INDIVIDUALS_TO_AMU != 1)
+        stop("ERROR: EMPTY_OMU_INDIVIDUALS_TO_AMU must be 0 or 1.");
+
+    if (USE_KIN_AVOIDANCE != 0)
+        stop("ERROR: USE_KIN_AVOIDANCE is not implemented in this model; set it to 0.");
+
+    if (abs((P_OWN_OMU + P_OTHER_OMU + P_AMU) - PATERNITY_WEIGHTS_SUM) > 1e-8)
+        stop("ERROR: P_OWN_OMU + P_OTHER_OMU + P_AMU must equal PATERNITY_WEIGHTS_SUM.");
+
+    if (MU_RATE < 0)
+        stop("ERROR: MU_RATE must be >= 0.");
+
+    if (CHROM_COUNT < 1)
+        stop("ERROR: CHROM_COUNT must be >= 1.");
+
+    if (GENE_COUNT < CHROM_COUNT)
+        stop("ERROR: GENE_COUNT should be >= CHROM_COUNT.");
+
+    if (GENE_LENGTH < 2)
+        stop("ERROR: GENE_LENGTH must be >= 2.");
+
+    if (NEUTRAL_FRACTION < 0 | DELETERIOUS_FRACTION < 0)
+        stop("ERROR: mutation fractions must be >= 0.");
+
+    if (abs((NEUTRAL_FRACTION + DELETERIOUS_FRACTION) - 1.0) > 1e-8)
+        stop("ERROR: NEUTRAL_FRACTION + DELETERIOUS_FRACTION must equal 1.");
+
+    if (abs(NEUTRAL_FRACTION - 1.0) > 1e-8 | abs(DELETERIOUS_FRACTION) > 1e-8)
+        stop("ERROR: neutral calibration requires NEUTRAL_FRACTION = 1.0 and DELETERIOUS_FRACTION = 0.0.");
+
+    if (DFE_MEAN >= 0)
+        stop("ERROR: DFE_MEAN must be negative for deleterious mutations.");
+
+    if (DFE_SHAPE <= 0)
+        stop("ERROR: DFE_SHAPE must be > 0.");
+
+    if (INTERGENIC_RECOMB_RATE < 0 | INTERGENIC_RECOMB_RATE > 0.5)
+        stop("ERROR: INTERGENIC_RECOMB_RATE must be in [0, 0.5].");
+}
+
+function (float) readLifeTableMortality(string path, integer maxAge)
+{
+    lines = readFile(path);
+
+    if (size(lines) < 2)
+        stop("ERROR: LIFE_TABLE_FILE contains no data rows: " + path);
+
+    header = strsplit(lines[0], "\t");
+    if (size(header) < 2)
+        stop("ERROR: LIFE_TABLE_FILE header must contain age and annual_mortality.");
+
+    if (header[0] != "age" | header[1] != "annual_mortality")
+        stop("ERROR: LIFE_TABLE_FILE header must be: age<TAB>annual_mortality.");
+
+    mort = rep(-1.0, maxAge + 1);
+
+    for (i in 1:(size(lines) - 1))
+    {
+        if (lines[i] == "")
+            next;
+
+        fields = strsplit(lines[i], "\t");
+        if (size(fields) < 2)
+            stop("ERROR: bad life table row: " + lines[i]);
+
+        age = asInteger(fields[0]);
+        q = asFloat(fields[1]);
+
+        if (age < 0 | age > maxAge)
+            stop("ERROR: life table age outside 0..MAX_AGE: " + age);
+
+        if (q < 0.0 | q > 1.0)
+            stop("ERROR: annual_mortality must be in [0,1] at age " + age);
+
+        mort[age] = q;
+    }
+
+    for (a in 0:maxAge)
+    {
+        if (mort[a] < 0.0)
+            stop("ERROR: LIFE_TABLE_FILE missing age: " + a);
+    }
+
+    return mort;
+}
+
+function (float) stableAgeWeights(float mortality)
+{
+    maxAge = size(mortality) - 1;
+    lx = rep(1.0, maxAge + 1);
+
+    if (maxAge >= 1)
+    {
+        for (a in 1:maxAge)
+            lx[a] = lx[a - 1] * (1.0 - mortality[a - 1]);
+    }
+
+    total = sum(lx);
+    if (total <= 0.0)
+        stop("ERROR: invalid life table; total survivorship is zero.");
+
+    return lx / total;
+}
+
+function (void) initializeRecombinationMapFromCompressedGenome(void)
+{
+    rates = c();
+    ends = c();
+
+    baseGenes = asInteger(floor(GENE_COUNT / CHROM_COUNT));
+    extraGenes = GENE_COUNT - baseGenes * CHROM_COUNT;
+
+    pos = 0;
+
+    for (chr in 0:(CHROM_COUNT - 1))
+    {
+        genesOnChr = baseGenes;
+        if (chr < extraGenes)
+            genesOnChr = genesOnChr + 1;
+
+        for (g in 0:(genesOnChr - 1))
+        {
+            geneStart = pos;
+            geneEnd = geneStart + GENE_LENGTH - 1;
+
+            // 每个压缩基因内部不发生重组。
+            rates = c(rates, 0.0);
+            ends = c(ends, geneEnd - 1);
+
+            // 相邻基因之间发生重组；染色体边界处近似为染色体间自由重组。
+            if (g < (genesOnChr - 1))
+            {
+                rates = c(rates, INTERGENIC_RECOMB_RATE);
+                ends = c(ends, geneEnd);
+            }
+            else
+            {
+                if (chr < (CHROM_COUNT - 1))
+                {
+                    rates = c(rates, 0.5);
+                    ends = c(ends, geneEnd);
+                }
+                else
+                {
+                    rates = c(rates, 0.0);
+                    ends = c(ends, geneEnd);
+                }
+            }
+
+            pos = geneEnd + 1;
+        }
+    }
+
+    expectedLength = GENE_COUNT * GENE_LENGTH;
+    if (pos != expectedLength)
+        stop("ERROR: compressed genome length mismatch.");
+
+    defineConstant("GENOME_LENGTH", expectedLength);
+    initializeRecombinationRate(rates, ends);
+}
+
+function (void) initializeLogFiles(void)
+{
+    logFile = OUT_PREFIX + ".burnin_demography.tsv";
+    header = "cycle\tN\tN_female\tN_male\tN_juvenile\tN_age0\tN_age1\tbirths_total\tbirths_own_OMU\tbirths_other_OMU\tbirths_AMU\tadult_females\tadult_males\tbreeding_females\tOMU_count\tAMU_males\tAMU_count_proxy\tAMU_males_per_OMU\tdominant_males\tmean_age";
+    writeFile(logFile, header, append=F);
+    sim.setValue("burnin_log_file", logFile);
+
+    qaFile = OUT_PREFIX + ".burnin_age_social_QA.tsv";
+    qaHeader = "cycle\tstage\tN\tage_0_1\tage_2_4\tage_5_9\tage_10_14\tage_15_19\tage_20_28\tOMU_count\tdominant_males\tdominant_candidate_males\tbackup_candidate_males\tAMU_dominant_candidate_males\tAMU_backup_candidate_males\tvacant_OMU_count\tinvalid_dominant_males\tduplicate_dominant_males";
+    writeFile(qaFile, qaHeader, append=F);
+    sim.setValue("burnin_qa_file", qaFile);
+
+    neutralHeader = "cycle\tK\tN\tNc_over_K\tpi_neutral\tNe_pi\tNe_pi_over_K\tNe_pi_over_Nc\tdensity_factor\tbirths_total\tOMU_count\tAMU_males\tdominant_males\tmean_age";
+    writeFile(NEUTRAL_CALIBRATION_OUT, neutralHeader, append=F);
+    sim.setValue("neutral_calibration_file", NEUTRAL_CALIBRATION_OUT);
+}
+
+function (logical) shouldWriteBurninStats(void)
+{
+    return (sim.cycle % BURNIN_LOG_INTERVAL == 0 | sim.cycle == 1 | sim.cycle == BURNIN_YEARS);
+}
+
+function (void) resetBirthCounters(void)
+{
+    sim.setValue("births_total", 0);
+    sim.setValue("births_own_OMU", 0);
+    sim.setValue("births_other_OMU", 0);
+    sim.setValue("births_AMU", 0);
+    sim.setValue("last_father_category", "none");
+}
+
+function (void) incrementBirthCounter(string category)
+{
+    sim.setValue("births_total", sim.getValue("births_total") + 1);
+
+    if (category == "own_OMU")
+        sim.setValue("births_own_OMU", sim.getValue("births_own_OMU") + 1);
+    else
+    {
+        if (category == "other_OMU")
+            sim.setValue("births_other_OMU", sim.getValue("births_other_OMU") + 1);
+        else
+        {
+            if (category == "AMU")
+                sim.setValue("births_AMU", sim.getValue("births_AMU") + 1);
+        }
+    }
+}
+
+function (void) writeBurninLog(void)
+{
+    inds = p1.individuals;
+    N = size(inds);
+
+    if (N == 0)
+    {
+        line = sim.cycle + "\t0\t0\t0\t0\t0\t0\t" +
+               sim.getValue("births_total") + "\t" +
+               sim.getValue("births_own_OMU") + "\t" +
+               sim.getValue("births_other_OMU") + "\t" +
+               sim.getValue("births_AMU") +
+               "\t0\t0\t0\t0\t0\t0\tNA\t0\tNA";
+        writeFile(sim.getValue("burnin_log_file"), line, append=T);
+        return;
+    }
+
+    females = inds[inds.sex == "F"];
+    males = inds[inds.sex == "M"];
+    juveniles = inds[inds.age < FEMALE_MIN_REP_AGE];
+    age0 = inds[inds.age == 0];
+    age1 = inds[inds.age == 1];
+
+    adultFemales = females[(females.age >= FEMALE_MIN_REP_AGE) & (females.age <= FEMALE_MAX_REP_AGE)];
+    adultMales = males[(males.age >= MALE_MIN_REP_AGE) & (males.age <= MALE_MAX_REP_AGE)];
+    breedingFemales = adultFemales[sapply(adultFemales, "isBreedingFemale(applyValue);")];
+
+    dominantMaleCount = countDominantMalesInReproductiveOMUs();
+    amuMales = males[(males.tag == 0) & (males.age >= MALE_DISPERSAL_AGE)];
+
+    omuIds = getReproductiveOMUIds();
+
+    amuCountProxy = asInteger(ceil(size(amuMales) / AMU_TARGET_SIZE));
+    amuMalesPerOMU = "NA";
+    if (size(omuIds) > 0)
+        amuMalesPerOMU = size(amuMales) / size(omuIds);
+
+    meanAge = mean(inds.age);
+
+    line = sim.cycle + "\t" +
+           N + "\t" +
+           size(females) + "\t" +
+           size(males) + "\t" +
+           size(juveniles) + "\t" +
+           size(age0) + "\t" +
+           size(age1) + "\t" +
+           sim.getValue("births_total") + "\t" +
+           sim.getValue("births_own_OMU") + "\t" +
+           sim.getValue("births_other_OMU") + "\t" +
+           sim.getValue("births_AMU") + "\t" +
+           size(adultFemales) + "\t" +
+           size(adultMales) + "\t" +
+           size(breedingFemales) + "\t" +
+           size(omuIds) + "\t" +
+           size(amuMales) + "\t" +
+           amuCountProxy + "\t" +
+           amuMalesPerOMU + "\t" +
+           dominantMaleCount + "\t" +
+           meanAge;
+
+    writeFile(sim.getValue("burnin_log_file"), line, append=T);
+}
+
+function (float) calcPiNeutral(void)
+{
+    if (p1.individualCount < 2)
+        return 0.0;
+
+    muts = sim.mutationsOfType(m1);
+    if (size(muts) == 0)
+        return 0.0;
+
+    freqs = sim.mutationFrequencies(p1, muts);
+    if (size(freqs) == 0)
+        return 0.0;
+
+    return sum(2.0 * freqs * (1.0 - freqs)) / GENOME_LENGTH;
+}
+
+function (void) writeNeutralCalibrationLog(void)
+{
+    inds = p1.individuals;
+    N = size(inds);
+    piNeutral = calcPiNeutral();
+    NePi = piNeutral / (4.0 * MU_RATE);
+
+    NcOverK = N / K5200;
+    NePiOverK = NePi / K5200;
+    NePiOverNc = "NA";
+    if (N > 0)
+        NePiOverNc = NePi / N;
+
+    omuCount = 0;
+    amuMalesCount = 0;
+    dominantMaleCount = 0;
+    meanAge = "NA";
+
+    if (N > 0)
+    {
+        males = inds[inds.sex == "M"];
+        omuCount = size(getReproductiveOMUIds());
+        amuMalesCount = size(males[(males.tag == 0) & (males.age >= MALE_DISPERSAL_AGE)]);
+        dominantMaleCount = countDominantMalesInReproductiveOMUs();
+        meanAge = mean(inds.age);
+    }
+
+    line = sim.cycle + "\t" +
+           K5200 + "\t" +
+           N + "\t" +
+           NcOverK + "\t" +
+           piNeutral + "\t" +
+           NePi + "\t" +
+           NePiOverK + "\t" +
+           NePiOverNc + "\t" +
+           sim.getValue("density_factor") + "\t" +
+           sim.getValue("births_total") + "\t" +
+           omuCount + "\t" +
+           amuMalesCount + "\t" +
+           dominantMaleCount + "\t" +
+           meanAge;
+
+    writeFile(sim.getValue("neutral_calibration_file"), line, append=T);
+}
+
+function (void) writeBurninQALog(string stage)
+{
+    inds = p1.individuals;
+    N = size(inds);
+
+    if (N == 0)
+    {
+        line = sim.cycle + "\t" + stage + "\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0";
+        writeFile(sim.getValue("burnin_qa_file"), line, append=T);
+        return;
+    }
+
+    males = inds[inds.sex == "M"];
+    adultFemales = inds[(inds.sex == "F") &
+                        (inds.age >= FEMALE_MIN_REP_AGE) &
+                        (inds.age <= FEMALE_MAX_REP_AGE)];
+
+    age_0_1 = inds[(inds.age >= 0) & (inds.age <= 1)];
+    age_2_4 = inds[(inds.age >= 2) & (inds.age <= 4)];
+    age_5_9 = inds[(inds.age >= 5) & (inds.age <= 9)];
+    age_10_14 = inds[(inds.age >= 10) & (inds.age <= 14)];
+    age_15_19 = inds[(inds.age >= 15) & (inds.age <= 19)];
+    age_20_28 = inds[(inds.age >= 20) & (inds.age <= 28)];
+
+    omuIds = getReproductiveOMUIds();
+
+    dominantMaleCount = countDominantMalesInReproductiveOMUs();
+    dominantCandidateMales = males[(males.age >= DOM_MALE_MIN_AGE) &
+                                   (males.age <= DOM_MALE_MAX_AGE)];
+    backupCandidateMales = males[(males.age >= MALE_DOMINANCE_BACKUP_MIN_AGE) &
+                                 (males.age <= MALE_DOMINANCE_BACKUP_MAX_AGE)];
+    amuDominantCandidateMales = dominantCandidateMales[dominantCandidateMales.tag == 0];
+    amuBackupCandidateMales = backupCandidateMales[backupCandidateMales.tag == 0];
+    vacantOMUCount = countVacantReproductiveOMUs();
+    invalidDominantMales = countInvalidDominantMales();
+    duplicateDominantMales = countDuplicateDominantMales();
+
+    line = sim.cycle + "\t" +
+           stage + "\t" +
+           N + "\t" +
+           size(age_0_1) + "\t" +
+           size(age_2_4) + "\t" +
+           size(age_5_9) + "\t" +
+           size(age_10_14) + "\t" +
+           size(age_15_19) + "\t" +
+           size(age_20_28) + "\t" +
+           size(omuIds) + "\t" +
+           dominantMaleCount + "\t" +
+           size(dominantCandidateMales) + "\t" +
+           size(backupCandidateMales) + "\t" +
+           size(amuDominantCandidateMales) + "\t" +
+           size(amuBackupCandidateMales) + "\t" +
+           vacantOMUCount + "\t" +
+           invalidDominantMales + "\t" +
+           duplicateDominantMales;
+
+    writeFile(sim.getValue("burnin_qa_file"), line, append=T);
+}
+
+function (string) socialRole(object ind)
+{
+    if (ind.sex == "M")
+    {
+        if (ind.tagF == 1.0 & ind.tag > 0)
+            return "dominant_male";
+        if (ind.tag == 0 & ind.age >= MALE_DISPERSAL_AGE)
+            return "AMU_male";
+        if (ind.tag > 0)
+            return "OMU_male";
+        return "unassigned_male";
+    }
+
+    if (ind.sex == "F")
+    {
+        if (ind.age < FEMALE_MIN_REP_AGE)
+            return "juvenile_female";
+        if (ind.tag > 0)
+            return "OMU_female";
+        return "unassigned_female";
+    }
+
+    return "unknown";
+}
+
+function (void) writeSocialState(string path)
+{
+    header = "pedigreeID\tsex\tage\tomu_id\ttagF\tsocial_role";
+    writeFile(path, header, append=F);
+
+    inds = p1.individuals;
+    if (size(inds) == 0)
+        return;
+
+    for (ind in inds)
+    {
+        line = ind.pedigreeID + "\t" +
+               ind.sex + "\t" +
+               ind.age + "\t" +
+               ind.tag + "\t" +
+               ind.tagF + "\t" +
+               socialRole(ind);
+        writeFile(path, line, append=T);
+    }
+}
+
+function (void) assignInitialAgesAndSexStructure(void)
+{
+    inds = p1.individuals;
+
+    mortality = sim.getValue("life_mortality");
+    ageWeights = stableAgeWeights(mortality);
+    ages = 0:MAX_AGE;
+
+    sampledAges = sample(ages, size(inds), replace=T, weights=ageWeights);
+    inds.age = sampledAges;
+
+    // tag: OMU id；0表示AMU或未分配雄性池。
+    // tagF: 成年雌性=上次繁殖cycle；依赖期幼体=母亲pedigreeID；
+    //       成年雄性=1表示主雄，0表示非主雄。
+    inds.tag = 0;
+    inds.tagF = 0.0;
+}
+
+function (integer) getNextOMUId(void)
+{
+    id = sim.getValue("next_omu_id");
+    sim.setValue("next_omu_id", id + 1);
+    return id;
+}
+
+function (object) chooseDominantCandidate(object candidates)
+{
+    if (size(candidates) == 0)
+        return NULL;
+
+    if (DOM_MALE_RANDOM_WITHIN_CANDIDATES == 1)
+        return sample(candidates, 1);
+
+    return candidates[0];
+}
+
+function (float) motherTagF(object female)
+{
+    return -1.0 * (asFloat(female.pedigreeID) + 1.0);
+}
+
+function (object) getReproductiveFemales(void)
+{
+    inds = p1.individuals;
+    return inds[(inds.sex == "F") &
+                (inds.age >= FEMALE_MIN_REP_AGE) &
+                (inds.age <= FEMALE_MAX_REP_AGE) &
+                (inds.tag > 0)];
+}
+
+function (integer) getReproductiveOMUIds(void)
+{
+    females = getReproductiveFemales();
+
+    if (size(females) == 0)
+        return integer(0);
+
+    ids = sort(unique(females.tag));
+    return ids[ids > 0];
+}
+
+function (integer) countDominantMalesInReproductiveOMUs(void)
+{
+    inds = p1.individuals;
+    males = inds[inds.sex == "M"];
+    omuIds = getReproductiveOMUIds();
+
+    if (size(omuIds) == 0)
+        return 0;
+
+    n = 0;
+    for (omuId in omuIds)
+        n = n + size(males[(males.tag == omuId) & (males.tagF == 1.0)]);
+
+    return n;
+}
+
+function (integer) countVacantReproductiveOMUs(void)
+{
+    inds = p1.individuals;
+    males = inds[inds.sex == "M"];
+    omuIds = getReproductiveOMUIds();
+
+    if (size(omuIds) == 0)
+        return 0;
+
+    n = 0;
+    for (omuId in omuIds)
+    {
+        current = males[(males.tag == omuId) & (males.tagF == 1.0)];
+        if (size(current) == 0)
+            n = n + 1;
+    }
+
+    return n;
+}
+
+function (integer) countInvalidDominantMales(void)
+{
+    inds = p1.individuals;
+    males = inds[inds.sex == "M"];
+    dominants = males[(males.tag > 0) & (males.tagF == 1.0)];
+    omuIds = getReproductiveOMUIds();
+
+    if (size(dominants) == 0)
+        return 0;
+
+    if (size(omuIds) == 0)
+        return size(dominants);
+
+    n = 0;
+    for (dom in dominants)
+    {
+        if (!any(omuIds == dom.tag))
+            n = n + 1;
+    }
+
+    return n;
+}
+
+function (integer) countDuplicateDominantMales(void)
+{
+    inds = p1.individuals;
+    males = inds[inds.sex == "M"];
+    omuIds = getReproductiveOMUIds();
+
+    if (size(omuIds) == 0)
+        return 0;
+
+    n = 0;
+    for (omuId in omuIds)
+    {
+        current = males[(males.tag == omuId) & (males.tagF == 1.0)];
+        if (size(current) > 1)
+            n = n + size(current) - 1;
+    }
+
+    return n;
+}
+
+function (void) assignInitialSocialStructure(void)
+{
+    inds = p1.individuals;
+    females = inds[inds.sex == "F"];
+    males = inds[inds.sex == "M"];
+
+    adultFemales = females[(females.age >= FEMALE_MIN_REP_AGE) &
+                           (females.age <= FEMALE_MAX_REP_AGE)];
+
+    if (size(adultFemales) == 0)
+    {
+        // 随机初始化下的罕见边界情况。
+        // 将所有雌性分配到一个OMU，并尝试分配一个主雄。
+        omuId = getNextOMUId();
+        females.tag = omuId;
+        females.tagF = -999999.0;
+    }
+    else
+    {
+        adultFemales = sample(adultFemales, size(adultFemales), replace=F);
+        nOMU = asInteger(ceil(size(adultFemales) / OMU_FEMALES));
+
+        for (i in 0:(nOMU - 1))
+        {
+            omuId = getNextOMUId();
+            start = i * OMU_FEMALES;
+            end = min(c(start + OMU_FEMALES - 1, size(adultFemales) - 1));
+            group = adultFemales[start:end];
+            group.tag = omuId;
+            group.tagF = -999999.0;
+        }
+
+        // 雌性未成年个体随机分配到已有OMU。
+        omuIds = sort(unique(adultFemales.tag));
+        juvenileFemales = females[females.age < FEMALE_MIN_REP_AGE];
+        if (size(juvenileFemales) > 0)
+        {
+            juvenileFemales.tag = sample(omuIds, size(juvenileFemales), replace=T);
+            juvenileFemales.tagF = -999999.0;
+        }
+    }
+
+    // 雄性未成年个体在迁出前留在出生OMU。
+    omuIdsAll = sort(unique(females.tag));
+    omuIdsAll = omuIdsAll[omuIdsAll > 0];
+
+    maleJuveniles = males[males.age < MALE_DISPERSAL_AGE];
+    if (size(maleJuveniles) > 0 & size(omuIdsAll) > 0)
+    {
+        maleJuveniles.tag = sample(omuIdsAll, size(maleJuveniles), replace=T);
+        maleJuveniles.tagF = 0.0;
+    }
+
+    // 其他雄性初始进入AMU雄性池。
+    amuMales = males[males.age >= MALE_DISPERSAL_AGE];
+    amuMales.tag = 0;
+    amuMales.tagF = 0.0;
+
+    replaceDominantMales();
+}
+
+function (void) splitLargeOMUs(void)
+{
+    if (ALLOW_OMU_SPLIT == 0)
+        return;
+
+    inds = p1.individuals;
+    females = inds[inds.sex == "F"];
+    adultFemales = getReproductiveFemales();
+
+    omuIds = getReproductiveOMUIds();
+
+    if (size(omuIds) == 0)
+        return;
+
+    for (omuId in omuIds)
+    {
+        omuFemales = adultFemales[adultFemales.tag == omuId];
+
+        if (size(omuFemales) > OMU_SPLIT_THRESHOLD)
+        {
+            candidates = p1.individuals[(p1.individuals.sex == "M") &
+                                        (p1.individuals.tag == 0) &
+                                        (p1.individuals.age >= DOM_MALE_MIN_AGE) &
+                                        (p1.individuals.age <= DOM_MALE_MAX_AGE)];
+
+            if (size(candidates) == 0 & DOM_MALE_BACKUP_ALLOWED == 1)
+            {
+                candidates = p1.individuals[(p1.individuals.sex == "M") &
+                                            (p1.individuals.tag == 0) &
+                                            (p1.individuals.age >= MALE_DOMINANCE_BACKUP_MIN_AGE) &
+                                            (p1.individuals.age <= MALE_DOMINANCE_BACKUP_MAX_AGE)];
+            }
+
+            if (size(candidates) == 0 & SPLIT_REQUIRES_DOM_MALE == 1)
+                next;
+
+            newId = getNextOMUId();
+            movedFemales = sample(omuFemales, OMU_SPLIT_FEMALES, replace=F);
+            movedFemales.tag = newId;
+
+            newMale = chooseDominantCandidate(candidates);
+            if (!isNULL(newMale))
+            {
+                newMale.tag = newId;
+                newMale.tagF = 1.0;
+            }
+        }
+    }
+}
+
+function (void) dissolveEmptyOMUs(void)
+{
+    if (ALLOW_OMU_DISSOLUTION == 0)
+        return;
+
+    inds = p1.individuals;
+    females = inds[inds.sex == "F"];
+    adultFemales = getReproductiveFemales();
+
+    allTagged = inds[inds.tag > 0];
+    omuIds = sort(unique(allTagged.tag));
+
+    if (size(omuIds) == 0)
+        return;
+
+    for (omuId in omuIds)
+    {
+        nAdultFemales = size(adultFemales[adultFemales.tag == omuId]);
+
+        if (nAdultFemales <= OMU_DISSOLVE_FEMALES)
+        {
+            members = inds[inds.tag == omuId];
+
+            // 解散OMU中的雌性未成年个体尽可能随机分配到仍活跃的OMU。
+            activeIds = getReproductiveOMUIds();
+
+            femaleMembers = members[members.sex == "F"];
+            if (size(femaleMembers) > 0 & size(activeIds) > 0)
+                femaleMembers.tag = sample(activeIds, size(femaleMembers), replace=T);
+
+            maleMembers = members[members.sex == "M"];
+            if (size(maleMembers) > 0)
+            {
+                if (EMPTY_OMU_INDIVIDUALS_TO_AMU == 1)
+                    maleMembers.tag = 0;
+                maleMembers.tagF = 0.0;
+            }
+        }
+    }
+}
+
+function (void) retireOldDominantMales(void)
+{
+    if (DOM_MALE_RETIRE_AT_MAX_AGE == 0)
+        return;
+
+    males = p1.individuals[p1.individuals.sex == "M"];
+
+    oldDominants = males[(males.tag > 0) &
+                         (males.tagF == 1.0) &
+                         (males.age > DOM_MALE_MAX_AGE)];
+
+    if (size(oldDominants) > 0)
+    {
+        oldDominants.tag = 0;
+        oldDominants.tagF = 0.0;
+    }
+}
+
+function (void) disperseMales(void)
+{
+    if (MALE_LEAVE_NATAL_OMU == 0)
+        return;
+
+    males = p1.individuals[p1.individuals.sex == "M"];
+
+    dispersers = males[(males.age >= MALE_DISPERSAL_AGE) &
+                       (males.tag > 0) &
+                       (males.tagF != 1.0)];
+
+    if (size(dispersers) > 0)
+    {
+        dispersers.tag = 0;
+        dispersers.tagF = 0.0;
+    }
+}
+
+function (void) cleanupDominantMales(void)
+{
+    inds = p1.individuals;
+    if (size(inds) == 0)
+        return;
+
+    males = inds[inds.sex == "M"];
+    if (size(males) == 0)
+        return;
+
+    omuIds = getReproductiveOMUIds();
+    dominants = males[(males.tag > 0) & (males.tagF == 1.0)];
+
+    if (size(dominants) == 0)
+        return;
+
+    if (size(omuIds) == 0)
+    {
+        dominants.tag = 0;
+        dominants.tagF = 0.0;
+        return;
+    }
+
+    for (dom in dominants)
+    {
+        if (!any(omuIds == dom.tag))
+        {
+            dom.tag = 0;
+            dom.tagF = 0.0;
+        }
+    }
+
+    males = p1.individuals[p1.individuals.sex == "M"];
+    for (omuId in omuIds)
+    {
+        current = males[(males.tag == omuId) & (males.tagF == 1.0)];
+        if (size(current) > 1)
+        {
+            keep = chooseDominantCandidate(current);
+            extra = current[current.pedigreeID != keep.pedigreeID];
+            if (size(extra) > 0)
+            {
+                extra.tag = 0;
+                extra.tagF = 0.0;
+            }
+        }
+    }
+}
+
+function (void) resetNewAdultFemaleTags(void)
+{
+    females = p1.individuals[p1.individuals.sex == "F"];
+
+    // 雌性未成年个体可能在tagF中携带母亲pedigreeID。
+    // 一旦成为成年雌性，tagF重置为上次繁殖cycle存储位。
+    newAdultFemales = females[(females.age >= FEMALE_MIN_REP_AGE) &
+                              (females.tagF < 0.0)];
+
+    if (size(newAdultFemales) > 0)
+        newAdultFemales.tagF = -999999.0;
+}
+
+function (void) replaceDominantMales(void)
+{
+    inds = p1.individuals;
+    omuIds = getReproductiveOMUIds();
+
+    if (size(omuIds) == 0)
+        return;
+
+    if (DOM_MALE_REPLACEMENT_ON_DEATH == 0 & sim.cycle > 1)
+        return;
+
+    for (omuId in omuIds)
+    {
+        current = inds[(inds.sex == "M") &
+                       (inds.tag == omuId) &
+                       (inds.tagF == 1.0)];
+
+        if (size(current) > 0)
+            next;
+
+        candidates = inds[(inds.sex == "M") &
+                          (inds.tag == 0) &
+                          (inds.age >= DOM_MALE_MIN_AGE) &
+                          (inds.age <= DOM_MALE_MAX_AGE)];
+
+        if (size(candidates) == 0 & DOM_MALE_BACKUP_ALLOWED == 1)
+        {
+            candidates = inds[(inds.sex == "M") &
+                              (inds.tag == 0) &
+                              (inds.age >= MALE_DOMINANCE_BACKUP_MIN_AGE) &
+                              (inds.age <= MALE_DOMINANCE_BACKUP_MAX_AGE)];
+        }
+
+        if (size(candidates) > 0)
+        {
+            newMale = chooseDominantCandidate(candidates);
+            newMale.tag = omuId;
+            newMale.tagF = 1.0;
+        }
+    }
+}
+
+function (void) updateSocialStructure(void)
+{
+    resetNewAdultFemaleTags();
+    retireOldDominantMales();
+    disperseMales();
+    dissolveEmptyOMUs();
+    splitLargeOMUs();
+    cleanupDominantMales();
+    replaceDominantMales();
+}
+
+function (logical) hasDependentInfant(object female)
+{
+    if (REQUIRE_NO_DEPENDENT_INFANT == 0)
+        return F;
+
+    dep = p1.individuals[(p1.individuals.age < DEPENDENCE_AGE) &
+                         (p1.individuals.tagF == motherTagF(female))];
+
+    return (size(dep) > 0);
+}
+
+function (logical) isBreedingFemale(object female)
+{
+    if (female.sex != "F")
+        return F;
+
+    if (female.age < FEMALE_MIN_REP_AGE | female.age > FEMALE_MAX_REP_AGE)
+        return F;
+
+    if (female.tag <= 0)
+        return F;
+
+    if (hasDependentInfant(female))
+        return F;
+
+    yearsSinceLastBirth = sim.cycle - female.tagF;
+
+    // 如果没有依赖期幼体，雌性可按缩短后的间隔恢复繁殖。
+    // 这近似表示幼体死亡可缩短生育间隔的规则。
+    if (yearsSinceLastBirth < INTERBIRTH_IF_INFANT_DIES)
+        return F;
+
+    return T;
+}
+
+function (object) chooseFather(object female)
+{
+    inds = p1.individuals;
+    sim.setValue("last_father_category", "none");
+
+    own = inds[(inds.sex == "M") &
+               (inds.tag == female.tag) &
+               (inds.tagF == 1.0) &
+               (inds.age >= MALE_MIN_REP_AGE) &
+               (inds.age <= MALE_MAX_REP_AGE)];
+
+    other = inds[(inds.sex == "M") &
+                 (inds.tag > 0) &
+                 (inds.tag != female.tag) &
+                 (inds.tagF == 1.0) &
+                 (inds.age >= MALE_MIN_REP_AGE) &
+                 (inds.age <= MALE_MAX_REP_AGE)];
+
+    amu = inds[(inds.sex == "M") &
+               (inds.tag == 0) &
+               (inds.age >= MALE_MIN_REP_AGE) &
+               (inds.age <= MALE_MAX_REP_AGE)];
+
+    weights = c(P_OWN_OMU, P_OTHER_OMU, P_AMU);
+
+    if (size(own) == 0)
+        weights[0] = 0.0;
+    if (size(other) == 0)
+        weights[1] = 0.0;
+    if (size(amu) == 0)
+        weights[2] = 0.0;
+
+    if (sum(weights) <= 0.0)
+        return NULL;
+
+    if (DYNAMIC_PATERNITY_RENORMALIZE == 1)
+        weights = weights / sum(weights);
+
+    category = sample(0:2, 1, replace=F, weights=weights);
+
+    if (category == 0)
+    {
+        sim.setValue("last_father_category", "own_OMU");
+        return sample(own, 1);
+    }
+
+    if (category == 1)
+    {
+        sim.setValue("last_father_category", "other_OMU");
+        return sample(other, 1);
+    }
+
+    sim.setValue("last_father_category", "AMU");
+    return sample(amu, 1);
+}
+
+function (void) applyBurninSurvivalScaling(void)
+{
+    inds = p1.individuals;
+    if (size(inds) == 0)
+        return;
+
+    mortality = sim.getValue("life_mortality");
+
+    ageSurv = rep(1.0, size(inds));
+    for (i in 0:(size(inds) - 1))
+    {
+        age = inds[i].age;
+
+        if (age > MAX_AGE)
+            ageSurv[i] = 0.0;
+        else
+            ageSurv[i] = 1.0 - mortality[age];
+    }
+
+    expectedNoDensity = sum(ageSurv);
+    densityFactor = 1.0;
+
+    if (expectedNoDensity > K5200)
+        densityFactor = K5200 / expectedNoDensity;
+
+    inds.fitnessScaling = ageSurv * densityFactor;
+    sim.setValue("density_factor", densityFactor);
+}
+
+initialize()
+{
+    validateScalarParams();
+
+    setSeed(RANDOM_SEED);
+
+    defineConstant("NEUTRAL_CONTROL", T);
+
+    initializeSLiMModelType("nonWF");
+    initializeSLiMOptions(keepPedigrees=T);
+    initializeTreeSeq();
+    initializeSex("A");
+
+    initializeMutationRate(MU_RATE);
+
+    // 阶段1中性校准只输入m1中性突变；不创建有害突变来源或DFE类别。
+    // 使用整数ID以兼容SLiM 5.2的m/g对象命名规则。
+    initializeMutationType(1, 0.5, "f", 0.0);
+    m1.convertToSubstitution = T;
+
+    initializeGenomicElementType(1, m1, 1.0);
+    initializeGenomicElement(g1, 0, GENE_COUNT * GENE_LENGTH - 1);
+    initializeRecombinationMapFromCompressedGenome();
+
+    defineConstant("LIFE_MORTALITY", readLifeTableMortality(LIFE_TABLE_FILE, MAX_AGE));
+}
+
+1 early()
+{
+    sim.setValue("life_mortality", LIFE_MORTALITY);
+    sim.setValue("next_omu_id", 1);
+    sim.setValue("density_factor", 1.0);
+    resetBirthCounters();
+
+    sim.addSubpop("p1", INITIAL_N);
+
+    assignInitialAgesAndSexStructure();
+    assignInitialSocialStructure();
+    initializeLogFiles();
+
+    if (shouldWriteBurninStats())
+        writeBurninQALog("pre_breeding");
+
+    applyBurninSurvivalScaling();
+
+    catn("Initialized neutral calibration:");
+    catn("  GENETIC_MODE = " + GENETIC_MODE);
+    catn("  INITIAL_N    = " + INITIAL_N);
+    catn("  K5200        = " + K5200);
+    catn("  GENOME_LENGTH= " + GENOME_LENGTH);
+    catn("  calibration  = " + sim.getValue("neutral_calibration_file"));
+}
+
+first()
+{
+    if (sim.cycle > 1)
+    {
+        resetBirthCounters();
+        updateSocialStructure();
+        if (shouldWriteBurninStats())
+            writeBurninQALog("pre_breeding");
+    }
+}
+
+early()
+{
+    if (sim.cycle > 1)
+        applyBurninSurvivalScaling();
+}
+
+// reproduction()会对每个个体评估一次。
+// 只有符合条件的雌性繁殖。
+reproduction()
+{
+    if (individual.sex != "F")
+        return;
+
+    if (!isBreedingFemale(individual))
+        return;
+
+    father = chooseFather(individual);
+
+    if (isNULL(father))
+        return;
+
+    for (b in 1:LITTER_SIZE)
+    {
+        child = subpop.addCrossed(individual, father);
+
+        child.age = 0;
+        child.tag = individual.tag;
+        child.tagF = motherTagF(individual);
+        incrementBirthCounter(sim.getValue("last_father_category"));
+
+        // 新生个体在同一tick内也必须经历age-0死亡率。
+        mortality = sim.getValue("life_mortality");
+        densityFactor = sim.getValue("density_factor");
+        child.fitnessScaling = (1.0 - mortality[0]) * densityFactor;
+
+        if (child.sex == "M")
+        {
+            // 雄性后代在MALE_DISPERSAL_AGE前留在出生OMU。
+            // 依赖期或未成年阶段，tagF保留母亲pedigreeID。
+            child.tag = individual.tag;
+        }
+        else
+        {
+            // 雌性后代留在出生OMU。
+            child.tag = individual.tag;
+        }
+    }
+
+    // 成年雌性的tagF存储上次繁殖cycle。
+    individual.tagF = asFloat(sim.cycle);
+}
+
+BURNIN_YEARS early()
+{
+    // 空的终点事件：确保SLiM运行到BURNIN_YEARS。
+}
+
+late()
+{
+    if (shouldWriteBurninStats())
+    {
+        writeBurninLog();
+        writeBurninQALog("post_mortality");
+        writeNeutralCalibrationLog();
+    }
+
+    if (p1.individualCount == 0)
+    {
+        catn("WARNING: population went extinct during neutral calibration at cycle " + sim.cycle);
+        writeSocialState(BURNIN_SOCIAL_STATE_OUT);
+        catn("Saved burn-in social state: " + BURNIN_SOCIAL_STATE_OUT);
+        if (SAVE_TREES == 1)
+            sim.treeSeqOutput(BURNIN_TREES_OUT);
+        sim.simulationFinished();
+    }
+
+    if (sim.cycle == BURNIN_YEARS)
+    {
+        if (SAVE_TREES == 1)
+        {
+            sim.treeSeqOutput(BURNIN_TREES_OUT);
+            catn("Saved burn-in tree sequence: " + BURNIN_TREES_OUT);
+        }
+
+        writeSocialState(BURNIN_SOCIAL_STATE_OUT);
+        catn("Saved burn-in social state: " + BURNIN_SOCIAL_STATE_OUT);
+
+        catn("Finished neutral calibration at cycle " + sim.cycle + ", N = " + p1.individualCount);
+        sim.simulationFinished();
+    }
+}
