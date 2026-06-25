@@ -1,0 +1,20 @@
+parameter                         | value                                | type   | required | description
+RUN_STAGE                         | neutral_calibration                  | string | yes      | 第一阶段：中性校准，用于建立K5200与pi推断Ne之间的换算关系
+SLIM_SCRIPT                       | slim/rrox_neutral_calibration.slim   | path   | yes      | 阶段1专用SLiM脚本；不修改已验证的rrox_burnin.slim和rrox_forward.slim
+SLIM_BIN                          | slim                                 | string | yes      | SLiM可执行程序名称或路径
+K_LIST                            | 500,1000,2000,5000                   | string | yes      | 候选K5200列表；正式校准时可按需要扩展
+REPLICATES                        | 5                                    | int    | yes      | 每个候选K的独立重复数
+REPLICATE_START                   | 1                                    | int    | yes      | 起始重复编号
+SEED_BASE                         | 700000                               | int    | yes      | 阶段1随机种子基准值
+BURNIN_YEARS                      | 10000                                | int    | yes      | 中性校准burn-in长度，单位tick/年
+BURNIN_LOG_INTERVAL               | 100                                  | int    | yes      | 中性校准输出间隔，单位tick/年
+INITIAL_N_MODE                    | equal_to_K                           | string | yes      | 初始N设置方式；equal_to_K表示INITIAL_N等于候选K
+GENETIC_MODE                      | neutral                              | string | yes      | 阶段1固定为neutral
+NEUTRAL_FRACTION                  | 1.0                                  | float  | yes      | 阶段1只输入中性突变
+DELETERIOUS_FRACTION              | 0.0                                  | float  | yes      | 阶段1不输入有害突变
+SAMPLE_SIZE                       | 60                                   | int    | yes      | 遗传统计目标样本量；阶段1 SLiM端pi_neutral当前使用全体存活个体频率，保留该参数用于后续抽样扩展
+MU_RATE                           | 1.36e-8                              | float  | yes      | 每bp每繁殖事件突变率，用于Ne_pi = pi_neutral/(4*MU_RATE)
+OUTDIR                            | outputs/neutral_calibration          | path   | yes      | 阶段1输出目录
+WRITE_SH                          | outputs/logs/run_stage1_neutral_calibration.sh | path | yes | 生成的阶段1命令脚本路径
+SAVE_TREES                        | 1                                    | bool   | yes      | 是否保存校准结束时的tree sequence
+STABLE_WINDOW_POINTS              | 20                                   | int    | no       | 汇总脚本默认取最后20个输出点作为稳定窗口
